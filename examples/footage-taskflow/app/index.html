@@ -1,0 +1,24 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>TaskFlow</title><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,"PingFang SC",sans-serif;background:#f6f7fb;color:#1c1d22}
+header{height:60px;background:#fff;border-bottom:1px solid #e6e8ef;display:flex;align-items:center;padding:0 28px;gap:12px;font-weight:700;font-size:20px}
+header i{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#2563eb,#7c3aed);display:block}
+main{max-width:980px;margin:36px auto;padding:0 24px}h2{font-size:26px;margin-bottom:18px}
+.row{display:flex;gap:12px;margin-bottom:22px}input{flex:1;height:52px;border:1.5px solid #d5d9e4;border-radius:12px;padding:0 16px;font-size:18px}
+button{height:52px;padding:0 22px;border:0;border-radius:12px;background:#2563eb;color:#fff;font-size:17px;font-weight:600;cursor:pointer}
+button.ai{background:linear-gradient(90deg,#7c3aed,#2563eb)}
+.card{background:#fff;border:1px solid #e6e8ef;border-radius:14px;padding:14px 18px;margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:18px}
+.card input{flex:none;width:20px;height:20px}.done{text-decoration:line-through;color:#9aa0ad}
+#plan{margin-top:18px;background:#f4f0ff;border:1.5px solid #d9ccff;border-radius:14px;padding:18px 20px;font-size:17px;line-height:1.8;display:none}
+#plan b{color:#6d28d9}.spin{display:none;margin-top:16px;color:#6d28d9;font-size:17px}
+</style></head><body><header><i></i>TaskFlow</header><main><h2>今天的任务</h2>
+<div class="row"><input id="new" placeholder="添加任务，比如：准备周五客户演示"><button id="add">添加</button></div>
+<div id="list"><div class="card"><input type="checkbox">回复财务关于 Q4 预算的邮件</div><div class="card"><input type="checkbox">评审 API 设计文档</div></div>
+<div class="row" style="margin-top:20px"><button class="ai" id="ai">✦ AI 生成今日计划</button></div>
+<div class="spin" id="spin">AI 正在分析任务与日程…</div><div id="plan"></div></main>
+<script>
+const L=document.querySelector('#list');
+document.querySelector('#add').onclick=()=>{const v=document.querySelector('#new').value.trim();if(!v)return;L.insertAdjacentHTML('beforeend',`<div class="card"><input type="checkbox">${v}</div>`);document.querySelector('#new').value='';};
+L.onchange=e=>e.target.parentElement.classList.toggle('done',e.target.checked);
+document.querySelector('#ai').onclick=()=>{document.querySelector('#spin').style.display='block';setTimeout(()=>{document.querySelector('#spin').style.display='none';const p=document.querySelector('#plan');p.style.display='block';
+p.innerHTML='<b>09:00–10:30</b> 准备周五客户演示（最重要，需整块时间）<br><b>10:30–11:00</b> 回复财务 Q4 预算邮件<br><b>14:00–15:00</b> 评审 API 设计文档';},4000);};
+</script></body></html>

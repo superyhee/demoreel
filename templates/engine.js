@@ -1,0 +1,448 @@
+/* demo-engine.js — deterministic, frame-accurate animation engine for software demo videos.
+ *
+ * The page must define window.DEMO = {...} BEFORE loading this file (or call Demo.init(cfg) later).
+ * The renderer calls window.render(t) for every frame (t in seconds); nothing depends on wall-clock time.
+ *
+ * Config (all optional except scene):
+ *   duration: 30, fps: 30
+ *   view: {cx:960, cy:620, w:1640, h:780}   // safe area the camera fits targets into (below the caption)
+ *   cam:   [[t, ['#sel', ...], maxScale, rotX, rotY], ...]   // camera keyframes; targets measured live
+ *   camIn:  [a,b]  window entry (rise + 3D tilt + blur)      camOut: [a,b] window exit
+ *   cursor:[[t, '#sel' | [x,y]], ...]  cursor path keyframes (stage coords for points)
+ *   clicks:[t, ...]                     click moments (ripple + press + 'click' sfx)
+ *   captions:[[a,b,'html with <em>accent</em>'], ...]
+ *   sfx:  [[t,'type',gain], ...]        extra sound events (pop|click|tick|whoosh|swish|suck|boom|chime|shimmer)
+ *   scene(t, H): your per-frame state function (runs BEFORE the camera is measured)
+ *   post(t, H):  runs after camera/cursor (e.g. end cards that sit outside #cam)
+ *   spotlight: {dim:.55, blur:2.2, pad:14, feather:40, radius:14, color:'10,8,16', minScale:1.15, skip:['#win']}
+ *              auto-focus the camera's HOLD targets (dim+blur outside, feathered); off while the camera moves
+ *   spots: [[a,b,['#sel'],dim?], ...]  explicit spotlight windows (override auto). Spots that follow each other within
+ *              spotChain (0.6 s) are CHAINED: the lit box morphs (spotMorph 0.55 s) and the dim never drops (no flash)
+ *   footage: [{el:'#rec', src:'rec/f', ext:'jpg', fps:30, frames:N, w:1280, h:800, map:[[projT,footT],...],
+ *              hotspots:{'#hs-input':[x,y,w,h]}, speedBadge:true}]  real recordings (see footage_prep.py);
+ *              map = piecewise-linear project→footage seconds (slope>1 = sped up + '⏩ ×N' badge, equal footT = freeze)
+ *   subtitles: {items:[{t0,t1,words:[{t,text}]}], keywords:[..], accent, size, band}  VO-synced subtitles (scripts/subtitle_marks.py):
+ *              phrase fade/slide, current word highlighted, upcoming words dimmed, keywords in accent; auto-moves to the top
+ *              (position:'bottom' default; 'auto' moves them below the caption band when the focus target sits at the bottom).
+ *   camSfx: 'off' | {minGap:8, gain:0.2}   auto whoosh on camera moves (default sparse; 'off' = only scene whooshes you add)
+ *   camBounds: '#win'   framing rules: shots on the bounds selector = WIDE (app ≈ wideFill 90 % of screen, equal margins);
+ *                       other zoomed shots = CLOSE-UP (fill 100 %, viewport clamped to the app, target kept below captionSafe px)
+ *   maxZoom: 1.4        global cap on camera scale (keep context; let spotlight do the focusing)
+ *   camRho: 1.25        camera path between shots = van Wijk–Nuij optimal zoom/pan (near → pan, far → gentle zoom-out). Lower = flatter
+ *   cutS: 1.6           optional: if the path length S exceeds this, CUT instead of flying (or per shot: cam[i][5]={cut:true})
+ *   motionBlurMax: 1.5  px; camPath:'linear' restores plain interpolation. (viaWide/viaCenter are superseded and ignored)
+ *   NOTE: keyframe targets are measured in the scene state at the keyframe's own time (scene must be pure in t)
+ *   minimap: {target:'#win', panels:[['#side','侧栏'],...], w:300, pos:[x,y], color, minScale:1.12}  'you are here' map while zoomed
+ *
+ * Required DOM: #stage containing #cam (wrapping the app window). Engine injects #cap, #cursor, #ripple, #topfade.
+ */
+(function(){
+const H={};
+H.$=s=>document.querySelector(s); H.$$=s=>[...document.querySelectorAll(s)];
+H.cl=x=>Math.max(0,Math.min(1,x)); H.p=(t,a,b)=>H.cl((t-a)/(b-a));
+H.eo=x=>1-Math.pow(1-x,3); H.eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+H.eio5=x=>x<.5?16*x**5:1-Math.pow(-2*x+2,5)/2;
+H.back=x=>{const c=1.7;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+H.lerp=(a,b,k)=>a+(b-a)*k;
+H.typed=(s,k)=>s.slice(0,Math.floor(s.length*k+1e-6));
+H.caret=(t,a,b)=>t>a&&t<b&&Math.floor(t*3)%2?'▍':'';
+/** pop-in scale: 0 before start, overshoot to 1 */
+H.pop=(t,a,d=0.35)=>{const k=H.p(t,a,a+d);return k<=0?0:H.back(k);};
+/** fade+slide helper: sets opacity & translateY on el */
+H.rise=(el,t,a,d=0.5,dy=20)=>{const k=H.eo(H.p(t,a,a+d));el.style.opacity=k;el.style.transform=`translateY(${(1-k)*dy}px)`;return k;};
+/** animate an element's height from 0 to natural height (overflow must be hidden) */
+H.grow=(el,k)=>{el.style.display=k<=0?'none':'';if(k<=0)return;el.style.height='auto';const h=el.offsetHeight;el.style.height=(k*h)+'px';el.style.opacity=k;};  // set inner text BEFORE calling
+// Lucide-style icons (24x24, stroke). Use H.I('mail') inside template strings.
+H.IC={
+mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+msg:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+checkc:'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+check:'<path d="M20 6 9 17l-5-5"/>',
+reply:'<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
+timer:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M10 2h4"/>',
+pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+act:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+lib:'<path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/>',
+zap:'<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+app:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M6 6.5h.01M10 6.5h.01"/>',
+layers:'<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+flask:'<path d="M10 2v7.5L4 20a1 1 0 0 0 .9 1.5h14.2a1 1 0 0 0 .9-1.5L14 9.5V2M8.5 2h7M7 16h10"/>',
+db:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0"/>',
+grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+flow:'<rect x="3" y="3" width="8" height="8" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+spark:'<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/>',
+folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+refresh:'<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M8 16H3v5"/>',
+down:'<path d="m6 9 6 6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>', plus:'<path d="M12 5v14M5 12h14"/>',
+ext:'<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+chart:'<path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/>',
+src:'<path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+notes:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M9 9h1M9 13h6M9 17h6"/>',
+settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+play:'<path d="m6 3 14 9-14 9z"/>',
+plane:'<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>', code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+};
+H.I=(n,st)=>`<svg class="i" viewBox="0 0 24 24"${st?` style="${st}"`:''}>${H.IC[n]||''}</svg>`;
+
+let C=null;
+function inject(){
+  const st=H.$('#stage');
+  const add=(html)=>st.insertAdjacentHTML('beforeend',html);
+  if(!H.$('#topfade'))add('<div id="topfade" class="abs"></div>');
+  if(!H.$('#cap'))add('<div id="cap" class="abs"></div>');
+  if(!H.$('#ripple'))add('<div id="ripple" class="abs"></div>');
+  if(!H.$('#spot')){const z='position:absolute;left:0;top:0;pointer-events:none;';add(`<div id="spot" style="${z}z-index:17;display:none"></div>`+[0,1,2,3].map(i=>`<div class="sb" id="sb${i}" style="${z}z-index:16;display:none"></div>`).join(''));}
+  if(C.minimap&&!H.$('#mm'))add('<div id="mm" style="position:absolute;z-index:21;pointer-events:none;opacity:0"><div id="mmv" style="position:absolute"></div></div>');
+  if(!H.$('#cursor'))add('<svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M4 2l16 9.5-7 1.6 4.2 7.4-2.8 1.5-4.2-7.4L5 19z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>');
+}
+function union(sels){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const s of sels){const e=H.$(s);if(!e)continue;const r=e.getBoundingClientRect();if(!r.width&&!r.height)continue;x0=Math.min(x0,r.left);y0=Math.min(y0,r.top);x1=Math.max(x1,r.right);y1=Math.max(y1,r.bottom);}return [x0,y0,x1,y1];}
+function fillScale(){if(!C.camBounds)return 0;const B=H.$(C.camBounds);if(!B)return 0;const r=B.getBoundingClientRect();return Math.max(1920/r.width,1080/r.height);}
+function fit(k){const V=C.view;const [x0,y0,x1,y1]=union(k[1]);let s=Math.min(k[2],C.maxZoom||99,V.w/Math.max(1,x1-x0),V.h/Math.max(1,y1-y0));
+  let cx=(x0+x1)/2,cy=(y0+y1)/2;
+  if(C.camBounds){const B=H.$(C.camBounds),r=B&&B.getBoundingClientRect();
+    if(r&&k[1].includes(C.camBounds)){
+      // WIDE shot: the app takes ~wideFill (90%) of the screen with EQUAL margins on all sides (centred on the stage)
+      s=(C.wideFill??0.9)*Math.min(1920/r.width,1080/r.height)*(k[2]<1?k[2]:1);cx=(r.left+r.right)/2;cy=(r.top+r.bottom)/2+(V.cy-540)/s;}
+    else if(r&&k[2]>1.05){
+      // CLOSE-UP: fill the screen with the app (no empty canvas) …
+      s=Math.max(s,fillScale()*1.002);
+      // … and keep the target out of the caption band (top captionSafe px) and off the bottom edge
+      const top=C.captionSafe??140,bot=C.bottomSafe??24;
+      cy=Math.min(cy,y0+(V.cy-top)/s);cy=Math.max(cy,y1-(1080-bot-V.cy)/s);
+      const cc=clampHard([cx,cy,s],r);cx=cc[0];cy=cc[1];}}
+  return [cx,cy,s,k[3]||0,k[4]||0];}
+// keep the viewport inside the app (r = bounds rect). Hard clamp — no scale-dependent blending (that blending made the
+// centre oscillate when the scale hovered around the fill scale → visible jitter on zoom-outs).
+function clampHard(c,r){const V=C.view,s=c[2];
+  const cx=(r.right-r.left)<=1920/s?(r.left+r.right)/2:Math.min(Math.max(c[0],r.left+V.cx/s),r.right-(1920-V.cx)/s);
+  const cy=(r.bottom-r.top)<=1080/s?(r.top+r.bottom)/2:Math.min(Math.max(c[1],r.top+V.cy/s),r.bottom-(1080-V.cy)/s);
+  return [cx,cy,c[2],c[3],c[4]];}
+const isWide=n=>!!(C.camBounds&&C.cam[n]&&C.cam[n][1].includes(C.camBounds));
+// per frame: only BETWEEN two close-ups (holds or close→close moves): keep scale ≥ fill and the viewport inside the app.
+// Close↔wide moves just interpolate between their (already clamped) keyframes → monotonic, no wobble.
+function clampCam(c,t){if(!C.camBounds)return c;const B=H.$(C.camBounds);if(!B)return c;const [i,j]=segOf(t);
+  if(isWide(i)||isWide(j))return c;const r=B.getBoundingClientRect(),fill=Math.max(1920/r.width,1080/r.height);
+  return clampHard([c[0],c[1],Math.max(c[2],fill*1.002),c[3],c[4]],r);}
+// ---- camera path between two shots: van Wijk & Nuij "smooth and efficient zooming and panning" (same math as
+// d3.interpolateZoom). Near targets → mostly a pan; far targets → a gentle, perceptually constant zoom-out/in.
+// State (fx,fy,s) ↔ (ux,uy,w) with w = 1920/s (visible world width).
+function zoomPath(a,b,rho){
+  const ux0=a[0],uy0=a[1],w0=1920/a[2],ux1=b[0],uy1=b[1],w1=1920/b[2],dx=ux1-ux0,dy=uy1-uy0,d2=dx*dx+dy*dy,r2=rho*rho;
+  if(d2<1e-6){const S=Math.log(w1/w0)/rho;return {S:Math.abs(S),at:k=>[ux0+k*dx,uy0+k*dy,1920/(w0*Math.exp(rho*k*S))]};}
+  const d1=Math.sqrt(d2),b0=(w1*w1-w0*w0+r2*r2*d2)/(2*w0*r2*d1),b1=(w1*w1-w0*w0-r2*r2*d2)/(2*w1*r2*d1),
+        R0=Math.log(Math.sqrt(b0*b0+1)-b0),R1=Math.log(Math.sqrt(b1*b1+1)-b1),S=(R1-R0)/rho;
+  return {S:Math.abs(S),at:k=>{const sk=k*S,c=Math.cosh(R0),u=w0/(r2*d1)*(c*Math.tanh(rho*sk+R0)-Math.sinh(R0));
+    return [ux0+u*dx,uy0+u*dy,1920/(w0*c/Math.cosh(rho*sk+R0))];}};}
+function segOf(t){const K=C.cam;if(t<=K[0][0])return [0,0];if(t>=K[K.length-1][0])return [K.length-1,K.length-1];let i=0;while(t>K[i+1][0])i++;return [i,i+1];}
+function camAt(t,F){const K=C.cam;const [i,j]=segOf(t);if(i===j)return F[i];
+  const raw=H.p(t,K[i][0],K[j][0]);const same=JSON.stringify(K[i][1])===JSON.stringify(K[j][1]);
+  if(same||C.camPath==='linear'){const k=same?raw:H.eio(raw);return F[i].map((v,n)=>H.lerp(v,F[j][n],k));}   // holds: linear drift
+  const zp=zoomPath(F[i],F[j],C.camRho??1.25);
+  // very long jumps read better as a CUT (professional editing) than as a long flight
+  const cut=(K[j][5]&&K[j][5].cut)||(C.cutS&&zp.S>C.cutS);
+  if(cut)return raw<1?F[i]:F[j];
+  const k=H.eio(raw),p=zp.at(k);return [p[0],p[1],p[2],H.lerp(F[i][3],F[j][3],k),H.lerp(F[i][4],F[j][4],k)];}
+function rectC(sel){const r=H.$(sel).getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2];}
+function curPos(t){const K=C.cursor;if(!K.length||t<K[0][0]||t>K[K.length-1][0])return null;
+  for(let i=0;i<K.length-1;i++){const [a,A]=K[i],[b,B]=K[i+1];if(t<=b){const k=H.eio(H.p(t,a,b));const pa=typeof A==='string'?rectC(A):A,pb=typeof B==='string'?rectC(B):B;
+    const dx=pb[0]-pa[0],dy=pb[1]-pa[1],n=Math.hypot(dx,dy)||1,arc=Math.sin(k*Math.PI)*Math.min(60,n*0.12);
+    return [H.lerp(pa[0],pb[0],k)-dy/n*arc,H.lerp(pa[1],pb[1],k)+dx/n*arc];}}}
+
+// ---- dynamic subtitles (VO-synced, word highlight, keyword emphasis, auto position away from the focus)
+// subtitles:{items:[{t0,t1,words:[{t,text}]}], keywords:['Spec',...], accent:'#b98bff', size:40, band:190, mute:[[a,b]]}
+function initTrackDom(){if(!C.cursorTrack||H.$('#tcur'))return;const T=C.cursorTrack;
+  H.$('#stage').insertAdjacentHTML('beforeend',`<div id="tring" style="position:absolute;left:0;top:0;z-index:23;pointer-events:none;opacity:0;border-radius:50%;border:3px solid ${T.ringColor||'rgba(185,139,255,.95)'};background:${T.ringFill||'rgba(185,139,255,.18)'}"></div>
+  <svg id="tcur" viewBox="0 0 24 24" style="position:absolute;left:0;top:0;z-index:24;pointer-events:none;opacity:0;overflow:visible;transform-origin:17% 8%;filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))"><path d="M4 2l16 9.5-7 1.6 4.2 7.4-2.8 1.5-4.2-7.4L5 19z" fill="${T.color||'#111'}" stroke="${T.stroke||'#fff'}" stroke-width="1.6" stroke-linejoin="round"/></svg>`);}
+function initSubs(){const S=C.subtitles;if(!S||H.$('#subs'))return;const ac=S.accent||'#b98bff';
+  H.$('#stage').insertAdjacentHTML('beforeend',`<div id="subs" style="position:absolute;left:50%;bottom:56px;z-index:22;max-width:1500px;
+    padding:12px 26px;border-radius:16px;background:rgba(12,10,18,.74);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    box-shadow:0 10px 30px rgba(0,0,0,.35);font:600 ${S.size||40}px/1.35 'PingFang SC',-apple-system,sans-serif;color:#fff;
+    text-align:center;white-space:nowrap;opacity:0;letter-spacing:.5px"></div>`);
+  const st=document.createElement('style');st.textContent=`#subs .w{transition:none;display:inline-block}#subs .w.f{opacity:.42}#subs .w.k{color:${ac};font-weight:700}
+    #subs .w.c{color:#fff;text-shadow:0 0 18px ${ac}cc}#subs .w.k.c{color:${ac};text-shadow:0 0 18px ${ac}}`;document.head.appendChild(st);}
+function subFocusRect(t){   // the rect the viewer is looking at: active spot target, else camera hold target
+  const sp=spotAt(t);let sels=sp?sp[0]:null;if(!sels&&C.cam.length){const [i,j]=segOf(t);sels=C.cam[i][1];}
+  if(!sels)return null;const [x0,y0,x1,y1]=union(sels);return x1>x0?[x0,y0,x1,y1]:null;}
+function drawSubs(t){const S=C.subtitles;if(!S)return;const el=H.$('#subs');
+  // mute:[[a,b],...] — skip where the same words are already big on screen (hook title, logo/name card, end card)
+  if((S.mute||[]).some(([a,b])=>t>=a&&t<b)){el.style.opacity=0;return;}let it=null,idx=-1;
+  for(let k=0;k<S.items.length;k++){const x=S.items[k];if(t>=x.t0-0.18&&t<x.t1+0.22){it=x;idx=k;break;}}
+  if(!it){el.style.opacity=0;return;}
+  if(el._i!==idx){el._i=idx;const kw=(S.keywords||[]);el.innerHTML=it.words.map((w,n)=>{const isK=kw.some(k=>w.text.includes(k));
+      return `<span class="w${isK?' k':''}" data-n="${n}">${w.text.replace(/ /g,'&nbsp;')}</span>`;}).join('');}
+  const ws=el.children;let cur=-1;for(let n=0;n<it.words.length;n++)if(t>=it.words[n].t-0.04)cur=n;
+  for(let n=0;n<ws.length;n++){const c=ws[n].classList;c.toggle('f',n>cur);c.toggle('c',n===cur);
+    const k=n===cur?H.eo(H.p(t,it.words[n].t-0.04,it.words[n].t+0.14)):0;ws[n].style.transform=n===cur?`translateY(${-2*k}px) scale(${1+0.04*k})`:'';}
+  const kin=H.eo(H.p(t,it.t0-0.18,it.t0+0.1)),kout=1-H.p(t,it.t1,it.t1+0.22);el.style.opacity=Math.min(kin,kout);
+  // position: always the bottom band (default, like broadcast subtitles); position:'auto' dodges a focus target there
+  const fr=S.position==='auto'?subFocusRect(t):null,band=S.band||190,top=!!(fr&&fr[3]>1080-band&&fr[1]>140);
+  const ty=(1-kin)*14;el.style.top=top?(C.captionSafe??140)+'px':'auto';el.style.bottom=top?'auto':'56px';
+  el.style.transform=`translateX(-50%) translateY(${top?-ty:ty}px)`;}
+
+// ---- tracked cursor (real recordings): big, smooth Screen-Studio-style pointer on the REAL pointer path
+// cursorTrack:{data:[[footFrame,x,y,kind]|[footFrame,null]] (scripts/cursor_track.py, footage px), footage:0,
+//              size:46, glide:[0.45,0.9], clicks:[t,...] (project s), color:'#111', ring:'#fff'}
+// Pre-computed once at init over the whole project timeline (pure function of t afterwards → parallel-render safe):
+// rest positions are kept exactly; every move between two rests becomes one eased glide that ENDS when the real pointer
+// arrived (so clicks land on time) — the real pointer must be erased from the frames (cursor_track.py erase).
+let CT=null;
+function initTrack(){const T=C.cursorTrack;if(!T||!C.footage)return;const F=C.footage[T.footage||0],fps=C.fps,N=Math.ceil(C.duration*fps)+1;
+  const by=new Map(T.data.map(r=>[r[0],r]));const raw=[];
+  for(let n=0;n<N;n++){const ft=footTime(F,n/fps),fi=Math.min(F.frames||1e9,Math.max(1,Math.floor(ft*F.fps+1e-6)+1));const r=by.get(fi);raw.push(r&&r[1]!=null?[r[1],r[2],r[3]]:null);}
+  // rests = runs of ≥3 frames within 6 px of the run anchor
+  const rests=[];let a=null;
+  for(let n=0;n<N;n++){const r=raw[n];
+    if(r&&a&&Math.abs(r[0]-a.p[0])+Math.abs(r[1]-a.p[1])<=6){a.n1=n;continue;}
+    if(a&&a.n1-a.n0>=2)rests.push(a);a=r?{n0:n,n1:n,p:[r[0],r[1]],k:r[2]}:null;}
+  if(a&&a.n1-a.n0>=2)rests.push(a);
+  const [g0,g1]=T.glide||[0.45,0.9],pos=new Array(N).fill(null);
+  rests.forEach((R,i)=>{for(let n=R.n0;n<=R.n1;n++)pos[n]=[R.p[0],R.p[1],R.k,0];
+    const Q=rests[i+1];if(!Q)return;const gap=(Q.n0-R.n1)/fps;
+    if(gap>(T.hideGap??3)&&raw.slice(R.n1+1,Q.n0).every(r=>!r))return;     // pointer really gone for a while → hide
+    const d=Math.hypot(Q.p[0]-R.p[0],Q.p[1]-R.p[1]),G=Math.min(g1,Math.max(g0,0.3+d/1600)),s0=Math.max(R.n1,Q.n0-Math.round(G*fps));
+    for(let n=R.n1+1;n<s0;n++)pos[n]=[R.p[0],R.p[1],R.k,0];
+    for(let n=s0;n<Q.n0;n++){const k=H.eio((n-s0)/Math.max(1,Q.n0-s0)),dx=Q.p[0]-R.p[0],dy=Q.p[1]-R.p[1],L=d||1,arc=Math.sin(k*Math.PI)*Math.min(40,L*0.08);
+      pos[n]=[R.p[0]+dx*k-dy/L*arc,R.p[1]+dy*k+dx/L*arc,'arrow',(dx/L)*Math.sin(k*Math.PI)];}});
+  // snap logged click times to the moment the pointer is actually at rest (action logs are offset by easing / edits)
+  T._clicks=(T.clicks||[]).map(t=>{const n=Math.round(t*fps);if(rests.some(R=>n>=R.n0&&n<=R.n1))return t;
+    const R=rests.find(R=>R.n0>n-0.3*fps&&R.n0<=n+(T.snap??1.2)*fps);return R?R.n0/fps+0.06:t;});
+  CT={F,pos};}
+function trackCursor(t){if(!CT)return null;const n=Math.round(t*C.fps),q=CT.pos[n];if(!q)return null;
+  const el=H.$(CT.F.el),r=el.getBoundingClientRect(),z=r.width/CT.F.w;
+  // fade in/out at visibility edges
+  let vis=1;for(let d=1;d<=6;d++){if(!CT.pos[n-d]||!CT.pos[n+d]){vis=Math.min(vis,(d-1)/6);}}
+  return {x:r.left+q[0]*z,y:r.top+q[1]*z,k:q[2],tilt:q[3],z,vis};}
+function drawTrack(t){const T=C.cursorTrack;if(!T)return;const c=trackCursor(t),el=H.$('#tcur'),rp=H.$('#tring');
+  if(!c){el.style.opacity=0;rp.style.opacity=0;return;}
+  // macOS hides the pointer while you type → fade it out around typing reveals
+  if(C.camOut)c.vis*=1-H.p(t,C.camOut[0],C.camOut[0]+0.35);if(C.camIn)c.vis*=H.p(t,C.camIn[1]-0.2,C.camIn[1]+0.2);   // never on intro/end cards
+  for(const Y of C.typing||[])c.vis*=1-H.cl(Math.min(H.p(t,Y.t0-0.25,Y.t0),1-H.p(t,Y.t1+0.1,Y.t1+0.35)));
+  const sz=(T.size||46)*Math.pow(c.z*1920/1920,0.55),cl=(T._clicks||T.clicks||[]).find(x=>t>=x-0.06&&t<x+0.5);
+  const press=cl!=null?1-H.cl(Math.abs(t-cl-0.03)/0.1):0;
+  el.style.opacity=c.vis;el.style.width=sz+'px';el.style.height=sz+'px';
+  el.style.transform=`translate(${c.x-sz*0.17}px,${c.y-sz*0.08}px) rotate(${c.tilt*-9}deg) scale(${1-0.16*press})`;
+  if(cl!=null&&t>=cl){const k=H.p(t,cl,cl+0.5),R=sz*1.6*(0.35+H.eo(k)*0.9);rp.style.opacity=(1-k)*0.85*c.vis;
+    rp.style.width=rp.style.height=R+'px';rp.style.transform=`translate(${c.x-R/2}px,${c.y-R/2}px)`;}else rp.style.opacity=0;}
+
+// ---- typing reveal (hybrid): freeze the footage on the frame where the text is complete (footage map) and reveal the
+// REAL text glyph by glyph by shrinking covers painted in the field's background colour (pixel-exact, any font).
+// typing:[{t0,t1,footage:0,lines:[[x,y,w,h,nChars],...] (footage px; w = nChars × glyph pitch),bg:'#221f26',caret:'#fff',tick:0.2,pad:8,pauses:[i..]}]
+// Pair it with a footage-map freeze: map:[...,[t0,ftBefore],[t0+1e-4,ftComplete],[t1,ftComplete],...]. Pointer resting on the text?
+// erase it, then repair glyphs it covered by re-rendering the text in the UI font (see references/pitfalls.md).
+function typeCount(T,t){const n=T.lines.reduce((a,l)=>a+l[4],0);if(t<=T.t0)return 0;if(t>=T.t1)return n;
+  // uneven human cadence, deterministic: per-glyph weight from a hash, longer after punctuation slots (T.pauses)
+  if(!T._cum){let c=[0];for(let i=0;i<n;i++){const h=Math.abs(Math.sin(i*78.233+1.7)*43758.5453)%1;c.push(c[i]+0.65+0.7*h+((T.pauses||[]).includes(i+1)?2.2:0));}T._cum=c;}
+  const c=T._cum,u=H.p(t,T.t0,T.t1)*c[n];let i=0;while(i<n&&c[i+1]<=u)i++;return i;}
+function initTyping(){(C.typing||[]).forEach((T,ti)=>{const F=C.footage[T.footage||0],el=H.$(F.el),box=el.parentElement;
+  T.lines.forEach(([x,y,w,h],li)=>box.insertAdjacentHTML('beforeend',`<div id="ty${ti}_${li}" style="position:absolute;pointer-events:none;display:none;background:${T.bg||'#222'};top:${y/F.h*100}%;height:${h/F.h*100}%"></div>`));
+  box.insertAdjacentHTML('beforeend',`<div id="tyc${ti}" style="position:absolute;pointer-events:none;display:none;width:${2/F.w*100}%;background:${T.caret||'#fff'};border-radius:1px"></div>`);});}
+function drawTyping(t){(C.typing||[]).forEach((T,ti)=>{const F=C.footage[T.footage||0],on=t>=T.t0-0.001&&t<T.t1;const c=typeCount(T,t);let o=0,cx=null,cl=null;
+  T.lines.forEach(([x,y,w,h,n],li)=>{const d=H.$(`#ty${ti}_${li}`),k=H.cl(c-o);const typed=Math.max(0,Math.min(n,c-o));
+    const left=x+typed/n*w;d.style.display=on?'block':'none';d.style.left=left/F.w*100+'%';d.style.width=Math.max(0,x+w+(T.pad??8)-left)/F.w*100+'%';   // pad also hides the frozen frame's own caret
+    if(typed>0||li===0){cx=left;cl=[y,h];}o+=n;});
+  const cu=H.$(`#tyc${ti}`);cu.style.display=on&&cl?'block':'none';
+  if(cl){cu.style.left=(cx+1)/F.w*100+'%';cu.style.top=(cl[0]+2)/F.h*100+'%';cu.style.height=(cl[1]-4)/F.h*100+'%';}});}
+
+// ---- callouts on real footage: animated highlight box + label pill, tracked in footage px (follows the camera)
+// notes:[{t0,t1,box:[x,y,w,h] (footage px) | sel:'#id'|['#a','#b'] (page elements, union),label:'…',side:'top'|'bottom'|'left'|'right',pad,color}]
+function initNotes(){(C.notes||[]).forEach((N,i)=>{const c=N.color||(C.accent||'#b98bff');
+  H.$('#stage').insertAdjacentHTML('beforeend',`<div id="dnB${i}" style="position:absolute;left:0;top:0;z-index:21;pointer-events:none;opacity:0;border:3px solid ${c};border-radius:10px;box-shadow:0 0 0 4px ${c}33,0 0 26px ${c}88"></div>
+  <div id="dnL${i}" style="position:absolute;left:0;top:0;z-index:21;pointer-events:none;opacity:0;white-space:nowrap;background:${c};color:#fff;font:700 26px 'PingFang SC',-apple-system,sans-serif;padding:8px 18px;border-radius:999px;box-shadow:0 10px 26px rgba(0,0,0,.4)">${N.label||''}</div>`);});}
+function drawNotes(t){(C.notes||[]).forEach((N,i)=>{const b=H.$("#dnB"+i),l=H.$("#dnL"+i);
+  const on=H.p(t,N.t0,N.t0+0.45),off=1-H.p(t,N.t1-0.3,N.t1),vis=t>=N.t0&&t<N.t1?Math.min(1,off):0;
+  if(!vis){b.style.opacity=0;l.style.opacity=0;return;}
+  let X,Y,W,Hh;const P=N.pad??6,k=H.eo(on);
+  if(N.sel){const rs=[].concat(N.sel).map(q=>H.$(q)).filter(Boolean).map(e=>e.getBoundingClientRect()).filter(r=>r.width>0);if(!rs.length){b.style.opacity=0;l.style.opacity=0;return;}
+    const x0=Math.min(...rs.map(r=>r.left)),y0=Math.min(...rs.map(r=>r.top)),x1=Math.max(...rs.map(r=>r.right)),y1=Math.max(...rs.map(r=>r.bottom));X=x0-P;Y=y0-P;W=x1-x0+2*P;Hh=y1-y0+2*P;}
+  else{const F=C.footage[N.footage||0],r=H.$(F.el).getBoundingClientRect(),z=r.width/F.w,[x,y,w,h]=N.box;X=r.left+x*z-P;Y=r.top+y*z-P;W=w*z+2*P;Hh=h*z+2*P;}
+  b.style.opacity=vis;b.style.left=X+'px';b.style.top=Y+'px';b.style.width=W+'px';b.style.height=Hh+'px';
+  b.style.clipPath=`inset(-12px ${(1-k)*100}% -12px -12px)`;            // draws on left → right
+  const kl=H.eo(H.p(t,N.t0+0.25,N.t0+0.6)),lw=l.offsetWidth,lh=l.offsetHeight,sd=N.side||'top';
+  const lx=sd==='left'?X-lw-14:sd==='right'?X+W+14:X,ly=sd==='top'?Y-lh-12:sd==='bottom'?Y+Hh+12:Y+Hh/2-lh/2;
+  l.style.opacity=vis*kl;l.style.transform=`translate(${lx}px,${ly+(1-kl)*10}px) scale(${0.9+0.1*kl})`;});}
+// ---- work clock for sped-up AI work (replaces "⏩ ×N"): real elapsed time keeps counting, speed shown small
+// footage[i].clock:{segs:[[t0,t1,rawA,speed],...] (project s → recording s), zero:rawStart, stopAt:rawEnd|null,
+//                   label:'Agent 工作中', done:'完成', show:[tA,tB]}
+function clockAt(K,t){let raw=null;for(const [a,b,ra,sp] of K.segs)if(t>=a&&t<b){raw=ra+(t-a)*sp;}
+  if(raw==null){const L=K.segs.filter(s=>s[1]<=t).pop();raw=L?L[2]+(L[1]-L[0])*L[3]:K.zero;}
+  const e=Math.max(0,Math.min(raw,K.stopAt??1e12)-K.zero);return {e,done:K.stopAt!=null&&raw>=K.stopAt};}
+const mmss=e=>`${String(Math.floor(e/60)).padStart(2,'0')}:${String(Math.floor(e%60)).padStart(2,'0')}`;
+function initClock(){if(!C.clock||H.$('#speed'))return;
+  H.$('#stage').insertAdjacentHTML('beforeend','<div id="speed" style="position:absolute;left:48px;bottom:44px;z-index:22;opacity:0;background:rgba(20,18,28,.88);color:#fff;font:700 30px -apple-system,sans-serif;padding:12px 26px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2)"></div>');}
+// C.clock:{segs:[[t0,t1,simA,speed],...], zero, stopAt, label, done, show:[a,b], speedLabel:'× 延时'}  (simulated UIs: segs map
+// project time → story time, e.g. [[54.8,70,0,162]] = 41 min of agent work shown in 15 s)
+function drawClock(t){const K=C.clock,b=H.$('#speed');if(!K||!b)return;const [sa,sb]=K.show||[0,1e9],c=clockAt(K,t);
+  b.style.opacity=Math.min(H.p(t,sa,sa+0.4),1-H.p(t,sb-0.4,sb));let sp=0;for(const [a,bb,,v] of K.segs)if(t>=a&&t<bb)sp=v;
+  const spin=`<span style="display:inline-block;width:22px;height:22px;margin-right:12px;vertical-align:-3px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:${C.accent||'#b98bff'};transform:rotate(${t*360*1.2}deg)"></span>`;
+  b.innerHTML=(c.done?`<span style="color:#4ade80;margin-right:10px">✓</span>`+(K.done||'完成'):spin+(K.label||'工作中'))+` <span style="font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace;margin-left:8px">${mmss(c.e)}</span>`+(sp>=1.5&&!c.done?`<span style="opacity:.6;font-size:24px;margin-left:12px">${Math.round(sp)}${K.speedLabel||'× 延时'}</span>`:'');}
+// ---- declutter (default on): never more than 3 overlay layers. When a callout / card / clock is on screen, the headline card
+// (then the persona pill) fades out in proportion — smooth, stateless, so parallel rendering stays deterministic.
+function declutter(){const op=e=>e?+(e.style.opacity||getComputedStyle(e).opacity):0;
+  const focus=Math.max(0,...[...document.querySelectorAll('.card,[id^="dnB"]')].map(op),op(H.$('#speed')));
+  const layers=['#cap','#subs','#speed','#persona','#mm'].map(q=>op(H.$(q))).filter(v=>v>0.3).length+[...document.querySelectorAll('.card,[id^="dnB"]')].filter(e=>op(e)>0.3).length;
+  if(layers<=3||focus<=0)return;let n=layers;
+  for(const q of ['#cap','#persona']){if(n<=3)break;const e=H.$(q);if(e&&op(e)>0.3){e.style.opacity=op(e)*(1-focus);n--;}}}
+// ---- footage (real screen recordings): image-sequence layer driven by a time map, + hotspots + speed badge
+function footTime(F,t){const m=F.map||[[F.start||0,0],[(F.start||0)+1e6,1e6]];
+  if(t<=m[0][0])return m[0][1];for(let i=0;i<m.length-1;i++)if(t<=m[i+1][0])return H.lerp(m[i][1],m[i+1][1],H.p(t,m[i][0],m[i+1][0]));return m[m.length-1][1];}
+function footRate(F,t){const m=F.map;if(!m)return 1;for(let i=0;i<m.length-1;i++)if(t>=m[i][0]&&t<m[i+1][0])return (m[i+1][1]-m[i][1])/Math.max(1e-6,m[i+1][0]-m[i][0]);return 0;}
+function updateFootage(t){const ps=[];let badge=0;
+  for(const F of C.footage){const el=H.$(F.el);if(!el)continue;const ft=footTime(F,t);
+    const idx=Math.min(F.frames||1e9,Math.max(1,Math.floor(ft*F.fps+1e-6)+1));const src=F.src+String(idx).padStart(5,'0')+'.'+(F.ext||'jpg');
+    if(el._src!==src){el._src=src;el.src=src;ps.push(el.decode().catch(()=>{}));}
+    if(F.badges){for(const [a,b,r] of F.badges)if(t>=a&&t<b)badge=Math.max(badge,r);}   // pre-edited footage: explicit ⏩ windows
+    else if(F.speedBadge!==false){const r=footRate(F,t);if(r>=1.5)badge=Math.max(badge,r);}}
+  C._badge=badge;const b=H.$('#speed'),K=C.footage.map(F=>F.clock).find(Boolean);
+  if(b&&K&&!C.clock){const [sa,sb]=K.show||[0,1e9],c=clockAt(K,t),vis=Math.min(H.p(t,sa,sa+0.4),1-H.p(t,sb-0.4,sb));b.style.opacity=vis;
+    const spin=`<span style="display:inline-block;width:22px;height:22px;margin-right:12px;vertical-align:-3px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:${C.accent||'#b98bff'};transform:rotate(${t*360*1.2}deg)"></span>`;
+    const ok=`<span style="color:#4ade80;margin-right:10px">✓</span>`;
+    b.innerHTML=(c.done?ok+(K.done||'完成'):spin+(K.label||'工作中'))+` <span style="font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace;margin-left:8px">${mmss(c.e)}</span>`+(badge&&!c.done?`<span style="opacity:.6;font-size:24px;margin-left:12px">${Math.round(badge)}× 延时</span>`:'');}
+  else if(b){b.style.opacity=badge?1:0;if(badge)b.textContent='⏩ ×'+Math.round(badge);}
+  return ps;}
+function initFootage(){for(const F of C.footage){const el=H.$(F.el);if(!el)continue;const box=el.parentElement;
+  if(getComputedStyle(box).position==='static')box.style.position='relative';
+  for(const [id,[x,y,w,h]] of Object.entries(F.hotspots||{}))box.insertAdjacentHTML('beforeend',`<div id="${id.replace('#','')}" style="position:absolute;left:${x/F.w*100}%;top:${y/F.h*100}%;width:${w/F.w*100}%;height:${h/F.h*100}%;visibility:hidden;pointer-events:none"></div>`);}
+  if(!H.$('#speed'))H.$('#stage').insertAdjacentHTML('beforeend','<div id="speed" style="position:absolute;left:48px;bottom:44px;z-index:22;opacity:0;background:rgba(20,18,28,.88);color:#fff;font:700 34px -apple-system,sans-serif;padding:12px 26px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2)"></div>');}
+// ---- spotlight: dim + blur everything outside the focus during camera holds
+function spotAt(t){
+  if(C.spots&&C.spots.length){
+    // chained spots: if the next spot starts within CH seconds, don't fade out/in (that flashes the whole frame) —
+    // keep the dim constant and MORPH the lit box from the previous target to the next one.
+    const SP=C.spots,CH=C.spotChain??0.6,MV=C.spotMorph??0.55;
+    for(let i=0;i<SP.length;i++){const [a,b,sels,dim]=SP[i];const prev=SP[i-1],next=SP[i+1];
+      const chainedIn=prev&&a-prev[1]<=CH,chainedOut=next&&next[0]-b<=CH;
+      const end=chainedOut?next[0]:b;               // bridge the gap to the next spot
+      if(t>=a&&t<end||(i===0&&false)){
+        const FI=(C.spotlight&&C.spotlight.fadeIn)||0.6,FO=(C.spotlight&&C.spotlight.fadeOut)||0.4;   // light UIs: use ~1.0/0.8 + dim ≈0.3
+        const kin=chainedIn?1:H.eio(H.p(t,a,a+FI)),kout=chainedOut?1:1-H.eio(H.p(t,b-FO,b));
+        const m=chainedIn?H.eio(H.p(t,a,a+MV)):1;  // morph progress from prev box
+        return [sels,kin*kout,dim,chainedIn&&m<1?{from:prev[2],k:m}:null];}
+    }
+  }
+  // explicit spots own the spotlight: mixing auto (camera-hold) spots with them causes a one-frame flash at each handoff
+  if(C.spots&&C.spots.length&&!(C.spotlight&&C.spotlight.autoWithSpots))return null;
+  if(!C.spotlight||!C.cam.length)return null;const K=C.cam,skip=(C.spotlight.skip||['#win']);
+  // auto spotlight follows camera HOLDS; between two eligible holds it MORPHS with the camera (dim stays constant → no
+  // brightness "breathing" between shots); it only fades at the first/last eligible hold.
+  const ok=n=>n>=0&&n<K.length-1&&JSON.stringify(K[n][1])===JSON.stringify(K[n+1][1])&&!K[n][1].some(x=>skip.includes(x))&&(K[n][2]||1)>=(C.spotlight.minScale||1.15);
+  for(let i=0;i<K.length-1;i++){if(t>=K[i][0]&&t<K[i+1][0]){
+    const FI=C.spotlight.fadeIn||0.6,FO=C.spotlight.fadeOut||0.4;
+    if(ok(i)){const prevOk=ok(i-2)||ok(i-1),nextOk=ok(i+1)||ok(i+2);   // hold segment
+      const kin=prevOk?1:H.eio(H.p(t,K[i][0],K[i][0]+FI)),kout=nextOk?1:1-H.eio(H.p(t,K[i+1][0]-FO,K[i+1][0]));return [K[i][1],kin*kout];}
+    // move segment: morph from the previous hold's target to the next hold's target
+    const pv=ok(i-1)?i-1:null,nx=ok(i+1)?i+1:null;
+    if(pv!==null&&nx!==null)return [K[nx][1],1,undefined,{from:K[pv][1],k:H.eio(H.p(t,K[i][0],K[i+1][0]))}];
+    return null;}}
+  return null;}
+function drawSpot(t){
+  const sp=H.$('#spot'),bands=H.$$('.sb');const r=spotAt(t);
+  if(!r||r[1]<=0.01){sp.style.display='none';bands.forEach(b=>b.style.display='none');return;}
+  const o=C.spotlight||{},k=r[1],dim=Math.min(r[2]??o.dim??0.35,o.maxDim??0.4)*k,bl=Math.min(o.blur??1.2,o.maxBlur??1.6)*k,pad=o.pad??14,fe=o.feather??40,rad=o.radius??14,col=o.color||'10,8,16';
+  let [x0,y0,x1,y1]=union(r[0]);
+  if(r[3]){const [p0,q0,p1,q1]=union(r[3].from),k=r[3].k;if(p1>p0){x0=H.lerp(p0,x0,k);y0=H.lerp(q0,y0,k);x1=H.lerp(p1,x1,k);y1=H.lerp(q1,y1,k);}}
+  x0-=pad;y0-=pad;x1+=pad;y1+=pad;
+  // the inset feather (blur fe + spread .6fe) must end at the pad edge → expand the element by 1.6·fe so no target pixel is dimmed
+  const E=fe*1.6,X=x0-E,Y=y0-E,W=x1-x0+2*E,Hh=y1-y0+2*E;
+  Object.assign(sp.style,{display:'block',left:X+'px',top:Y+'px',width:W+'px',height:Hh+'px',borderRadius:(rad+fe)+'px',
+    boxShadow:`0 0 0 4000px rgba(${col},${dim}),inset 0 0 ${fe}px ${fe*0.6}px rgba(${col},${dim})`});
+  if(bl<0.3){bands.forEach(b=>b.style.display='none');return;}
+  const m=fe*0.5,ix0=X+m,iy0=Y+m,ix1=X+W-m,iy1=Y+Hh-m,SW=1920,SH=1080;   // blur bands stay outside the clear area
+  [[0,0,SW,iy0],[0,iy1,SW,SH-iy1],[0,iy0,ix0,iy1-iy0],[ix1,iy0,SW-ix1,iy1-iy0]].forEach((q,i)=>{const b=bands[i];
+    Object.assign(b.style,{display:'block',left:q[0]+'px',top:q[1]+'px',width:Math.max(0,q[2])+'px',height:Math.max(0,q[3])+'px',backdropFilter:`blur(${bl.toFixed(2)}px)`,webkitBackdropFilter:`blur(${bl.toFixed(2)}px)`});});
+}
+// ---- minimap ("you are here"): schematic of the whole window + current viewport box
+function measureMM(){const M=C.minimap,w=H.$(M.target||'#win').getBoundingClientRect();
+  return {win:w,panels:(M.panels||[]).map(([sel,lab])=>{const e=H.$(sel);const r=e?e.getBoundingClientRect():null;return r&&r.width>4&&r.height>4?[r,lab]:null;}).filter(Boolean)};}
+function drawMinimap(t,c){const M=C.minimap,mm=H.$('#mm');const R=c.MR,W=M.w||300,hh=W*R.win.height/R.win.width,col=M.color||'#b98bff';
+  const show=c.sc>=(M.minScale||1.12)&&c.wi>=1&&c.wo<=0;mm._k=H.lerp(mm._k||0,show?1:0,0.25);if(t<0.05)mm._k=0;
+  // deterministic fade: based on scale distance instead of history
+  const k=H.cl((c.sc-(M.minScale||1.12))/0.12)*(c.wi>=1&&c.wo<=0?1:0);
+  const pos=M.pos||[1920-W-32,46];Object.assign(mm.style,{left:pos[0]+'px',top:pos[1]+'px',width:W+'px',height:hh+'px',opacity:k,
+    background:'rgba(18,16,24,.88)',border:'1px solid rgba(255,255,255,.16)',borderRadius:'10px',boxShadow:'0 12px 30px rgba(0,0,0,.45)',transform:`translateY(${(1-k)*-8}px)`});
+  const sx=W/R.win.width,sy=hh/R.win.height;let html='';
+  for(const [r,lab] of R.panels){html+=`<div style="position:absolute;left:${(r.left-R.win.left)*sx+2}px;top:${(r.top-R.win.top)*sy+2}px;width:${r.width*sx-4}px;height:${r.height*sy-4}px;background:rgba(255,255,255,.07);border-radius:4px;font-size:11px;color:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap">${lab}</div>`;}
+  // viewport (stage) mapped back into window space
+  const inv=(X,Y)=>[(X-c.cx)/c.sc+c.fx,(Y-c.cy)/c.sc+c.fy];const [a0,b0]=inv(0,0),[a1,b1]=inv(1920,1080);
+  const vx0=Math.max(0,(a0-R.win.left)*sx),vy0=Math.max(0,(b0-R.win.top)*sy),vx1=Math.min(W,(a1-R.win.left)*sx),vy1=Math.min(hh,(b1-R.win.top)*sy);
+  html+=`<div style="position:absolute;left:${vx0}px;top:${vy0}px;width:${Math.max(6,vx1-vx0)}px;height:${Math.max(6,vy1-vy0)}px;border:2px solid ${col};background:${col}22;border-radius:4px;box-shadow:0 0 12px ${col}88"></div>`;
+  if(mm._h!==html){mm.innerHTML=html;mm._h=html;}}
+function render(t){
+  const FP=C.footage?updateFootage(t):[];
+  // measure each camera keyframe's targets in the UI state AT THAT KEYFRAME'S TIME (scene is a pure fn of t),
+  // so targets that appear later (display:none now) or grow/shrink are framed correctly.
+  let Fseg=null;const camEl=H.$('#cam');
+  if(camEl&&C.cam.length&&C.scene){camEl.style.transform='none';camEl.style.filter='none';
+    const ks=new Set();for(const x of [t,t-1/C.fps])segOf(x).forEach(n=>ks.add(n));Fseg={};
+    for(const n of ks){C.scene(C.cam[n][0],H);Fseg[n]=fit(C.cam[n]);}}
+  C.scene&&C.scene(t,H);
+  const cam=H.$('#cam');
+  let s=1,wi=1,wo=0;
+  if(cam&&C.cam.length){
+    // measure targets with identity transform (2D/3D off) so keyframes are in stage space
+    cam.style.transform='none';cam.style.filter='none';
+    const mmRects=C.minimap?measureMM():null;
+    const F=Fseg?C.cam.map((k,n)=>Fseg[n]||null):C.cam.map(fit);
+    const c=clampCam(camAt(t,F),t),c0=clampCam(camAt(t-1/C.fps,F),t-1/C.fps);
+    wi=C.camIn?H.eo(H.p(t,C.camIn[0],C.camIn[1])):1; wo=C.camOut?H.eio(H.p(t,C.camOut[0],C.camOut[1])):0;
+    const [fx,fy,sc,rx,ry]=c;s=sc;const V=C.view;
+    const ty=(1-wi)*420-wo*60,rxx=rx+(1-wi)*28+wo*10,sc2=sc*H.lerp(1,0.82,wo);
+    // IMPORTANT: 3D transforms make Chrome rasterize at 1x then upscale (blurry text).
+    // Only use rotateX/Y while entering/exiting (motion hides it); holds use pure 2D -> crisp.
+    const use3d=(wi<1||wo>0)&&(Math.abs(rxx)>0.05||Math.abs(ry)>0.05);
+    cam.style.transform=`translate(${V.cx}px,${V.cy+ty}px)`+(use3d?` rotateX(${rxx}deg) rotateY(${ry}deg)`:'')+` scale(${sc2}) translate(${-fx}px,${-fy}px)`;
+    const speed=Math.hypot(c[0]-c0[0],c[1]-c0[1])*sc+Math.abs(c[2]-c0[2])*900;
+    const blur=Math.min(C.motionBlurMax??1.5,Math.max(0,speed-8)/40)+(1-wi)*12+wo*10;   // subtle; text stays legible mid-move
+    cam.style.filter=blur>0.35?`blur(${blur.toFixed(2)}px)`:'none';
+    cam.style.opacity=wi*(1-wo);
+    H.$('#topfade').style.opacity=wi*(1-wo);
+    if(C.minimap)drawMinimap(t,{cx:V.cx,cy:V.cy+ty,sc:sc2,fx,fy,wi,wo,MR:mmRects});
+  }
+  drawSpot(t);
+  // caption: center-out reveal
+  const capEl=H.$('#cap');let ch='',co=0,rv=0;
+  for(const [a,b,h] of C._caps){if(t>=a&&t<b){ch=h;rv=H.eo(H.p(t,a,a+0.45));co=1-H.p(t,b-0.25,b);}}
+  if(capEl.innerHTML!==ch)capEl.innerHTML=ch;capEl.style.opacity=ch?co*Math.min(1,rv*3):0;
+  capEl.style.transform=`translateX(-50%) translateY(${(1-rv)*-16}px) scale(${H.lerp(0.96,1,rv)})`;
+  capEl.style.clipPath=`inset(0 ${(1-rv)*50}% 0 ${(1-rv)*50}% round 999px)`;
+  // cursor + ripple
+  const cp=curPos(t),cu=H.$('#cursor');const pressed=C.clicks.some(x=>t>x&&t<x+0.12);
+  if(cp&&wi>0.99&&wo<0.01){const a=curPos(t-0.04),b2=curPos(t+0.04),vx=a&&b2?(b2[0]-a[0])/0.08:0,tilt=H.cl(Math.abs(vx)/2400)*Math.sign(vx)*-9;
+    cu.style.opacity=1;cu.style.filter='drop-shadow(0 3px 5px rgba(0,0,0,.45))';cu.style.transform=`translate(${cp[0]-4}px,${cp[1]-2}px) rotate(${tilt}deg) scale(${H.lerp(1,1.25,H.cl((s-1)/0.7))*(pressed?.84:1)})`;}else cu.style.opacity=0;
+  const rp=H.$('#ripple');let ro=0;for(const x of C.clicks){const k=H.p(t,x,x+0.45);if(k>0&&k<1&&cp){ro=(1-k)*0.9;rp.style.transform=`translate(${cp[0]-35}px,${cp[1]-35}px) scale(${0.3+H.eo(k)*1.1})`;}}rp.style.opacity=ro;
+  if(C.typing)drawTyping(t);if(C.notes)drawNotes(t);drawClock(t);drawTrack(t);drawSubs(t);
+  C.post&&C.post(t,H);
+  if(C.declutter!==false)declutter();
+  return FP.length?Promise.all(FP):undefined;   // Playwright awaits this, so footage frames are decoded before capture
+}
+function init(cfg){
+  C=Object.assign({duration:30,fps:30,view:{cx:960,cy:620,w:1640,h:780},cam:[],cursor:[],clicks:[],captions:[],sfx:[],captionMax:3.2},cfg);
+  // COMMERCIAL DEFAULTS (any software): short headline cards, VO subtitles picked up from subs.js (window.SUBS) if present,
+  // camera framing rules on '#win' when the page has one, no minimap unless asked for.
+  C._caps=C.captions.map(c=>c[3]==='hold'||!C.captionMax?c:[c[0],Math.min(c[1],c[0]+C.captionMax),c[2]]);
+  if(C.subtitles===undefined&&window.SUBS&&window.SUBS.length)C.subtitles={items:window.SUBS,keywords:window.SUBS_KW||[],accent:C.accent||'#b98bff'};
+  if(C.camBounds===undefined&&document.querySelector('#win'))C.camBounds='#win';
+  inject();
+  if(C.footage)initFootage();
+  initSubs();initTrackDom();initTrack();if(C.notes)initNotes();initClock();if(C.typing&&C.footage)initTyping();
+  // auto SFX: clicks + whoosh on every camera move between distinct keyframes
+  const S=[...C.sfx];C.clicks.forEach(t=>S.push([t,'click',1]));
+  if(C.cursorTrack)(C.cursorTrack._clicks||C.cursorTrack.clicks||[]).forEach(t=>S.push([t,'click',C.cursorTrack.clickGain??0.8]));
+  (C.typing||[]).forEach(T=>{if(T.tick===0)return;let prev=-1;for(let f=Math.ceil(T.t0*C.fps);f<T.t1*C.fps;f++){const c=typeCount(T,f/C.fps);
+    if(c!==prev&&c%2===1)S.push([f/C.fps,'tick',T.tick??0.2]);prev=c;}});
+  // camera-move whooshes: sparse by default (frequent whooshes on every move feel cheap — user feedback)
+  const cs=C.camSfx===undefined?{minGap:8,gain:0.2}:C.camSfx;
+  if(cs&&cs!=='off'){let last=-1e9;for(let i=1;i<C.cam.length;i++){const a=C.cam[i-1],b=C.cam[i];
+    if(JSON.stringify(a[1])!==JSON.stringify(b[1])&&b[0]-a[0]<1.6&&a[0]-last>=(cs.minGap??8)){S.push([a[0]+0.05,'whoosh',cs.gain??0.2]);last=a[0];}}}
+  window.SFX=S.sort((x,y)=>x[0]-y[0]);window.DURATION=C.duration;window.FPS=C.fps;
+  window.render=render;window.DEMO_CFG=C;window.DEMO_FIT=k=>fit(k);render(0);
+}
+window.Demo={init,H};
+if(window.DEMO)init(window.DEMO);
+})();

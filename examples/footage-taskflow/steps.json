@@ -1,0 +1,6 @@
+[{"wait":1.0,"mark":"start"},
+ {"type":["#new","准备周五客户演示",90],"pause":0.4},
+ {"click":"#add","pause":1.0},
+ {"click":"#list .card:nth-child(2) input","pause":1.0},
+ {"click":"#ai","mark":"ai_click"},
+ {"waitFor":"#plan b","mark":"plan_ready","pause":2.5}]

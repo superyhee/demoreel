@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!-- REAL-FOOTAGE template: a screen recording (image sequence from footage_prep.py) inside a window frame, driven
+     by the engine: camera push-ins, chained spotlights, captions, synthetic cursor on hotspots, speed-ramped waits.
+     1) record: record_web.py (web apps) or record_mac.sh (desktop)   2) footage_prep.py rec.mp4 rec/
+     3) fill FOOT (w,h,frames), MAP (project→footage seconds), HOT (hotspots in footage pixels), SHOTS/SPOTS/CUR
+     4) preview_sheet.py → render_parallel.py → mix.sh -->
+<html><head><meta charset="utf-8"><style>
+:root{--bg:#eef1f7;--ink:#14161c;--accent:#4f46e5}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;font-family:-apple-system,"PingFang SC",sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#stage{position:absolute;inset:0;overflow:hidden;background:radial-gradient(1200px 700px at 15% 10%,#e3e8ff,transparent 60%),radial-gradient(1000px 700px at 90% 95%,#f3e6ff,transparent 60%),var(--bg);perspective:2600px}
+.abs{position:absolute}
+em{font-style:normal;background:linear-gradient(90deg,#4f46e5,#9333ea);-webkit-background-clip:text;color:transparent}
+#cam{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#win{position:absolute;left:320px;top:186px;width:1280px;background:#000;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 40px 110px rgba(30,30,80,.25),0 0 0 1px rgba(0,0,0,.08)}
+#tb{height:36px;background:#f1f2f6;display:flex;align-items:center;gap:8px;padding-left:14px;border-bottom:1px solid #e3e5ec}
+#tb i{width:12px;height:12px;border-radius:50%;display:block}#tb span{margin-left:auto;margin-right:auto;font-size:14px;color:#888;transform:translateX(-30px)}
+#recbox{position:relative;width:1280px}#rec{display:block;width:100%}
+#cap{left:50%;top:44px;background:#fff;border-radius:999px;padding:14px 44px;font-size:44px;font-weight:700;white-space:nowrap;box-shadow:0 12px 34px rgba(30,30,80,.14);z-index:20}
+#topfade{left:0;right:0;top:0;height:180px;z-index:19;background:linear-gradient(var(--bg),rgba(238,241,247,0))}
+#cursor{width:34px;height:34px;z-index:30;left:0;top:0;transform-origin:4px 2px}
+#ripple{width:70px;height:70px;border-radius:50%;border:3px solid var(--accent);background:rgba(79,70,229,.12);z-index:29;opacity:0;left:0;top:0}
+#title,#end{left:0;right:0;text-align:center;z-index:6;opacity:0}
+#title{top:420px}#end{top:400px}
+.t1{font-size:84px;font-weight:800;letter-spacing:1px}.t2{font-size:40px;font-weight:600;margin-top:14px;color:#444}
+.cta{display:inline-block;margin-top:34px;background:linear-gradient(90deg,#4f46e5,#9333ea);color:#fff;font-size:30px;font-weight:600;padding:16px 40px;border-radius:999px}
+</style></head><body>
+<div id="stage">
+ <div id="title" class="abs"><div class="t1" id="tt1"></div><div class="t2" id="tt2"></div></div>
+ <div id="cam"><div id="win"><div id="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span id="url"></span></div>
+  <div id="recbox"><img id="rec"></div></div></div>
+ <div id="end" class="abs"><div class="t1" id="et1"></div><div class="t2" id="et2"></div><div class="cta" id="cta"></div></div>
+</div>
+<script>
+/* ======== EDIT THIS BLOCK ======== */
+const TXT={title:'TaskFlow',sub:'AI 帮你排好今天',url:'taskflow.app',caps:['一句话<em>添加任务</em>','AI <em>几秒</em>排出今日计划','最重要的事，<em>先给整块时间</em>'],end:'TaskFlow',endSub:'把精力留给重要的事',cta:'免费试用'};
+const FOOT={src:'rec/f',ext:'jpg',fps:30,frames:287,w:1440,h:900};           // printed by footage_prep.py
+const FRAME='window';   // 'window' (desktop chrome) | 'phone' (mobile bezel, for iOS/Android recordings) | 'none' (terminal / already-framed footage)
+// project time → footage time (s). Slope 1 = real time, >1 = sped up (shows ⏩ ×N), flat = freeze frame
+const MAP=[[3.0,0.6],[6.7,4.3],[7.4,8.3],[8.6,9.5],[16,9.5]];
+// hotspots in FOOTAGE pixels [x,y,w,h] — camera / spotlight / cursor targets
+const HOT={'#hs-input':[254,153,932,46],'#hs-list':[254,230,932,186],'#hs-check':[272,308,22,22],'#hs-add':[1108,153,78,46],
+           '#hs-ai':[254,432,186,48],'#hs-spin':[254,500,420,34],'#hs-plan':[254,506,932,128]};
+const SHOTS=[[2.4,['#win'],1],[3.6,['#hs-input','#hs-list'],1.45],[6.6,['#hs-ai','#hs-plan'],1.45],[9.0,['#hs-plan'],1.75],[12.9,['#win'],0.92]];
+const SPOTS=[[3.8,5.1,['#hs-input','#hs-add']],[5.2,6.4,['#hs-list']],[6.6,8.6,['#hs-ai','#hs-plan']],[8.7,12.6,['#hs-plan']]];
+// clicks happen at recording times → project times via the MAP (footage 1.0/2.2/3.23/4.26 → project 3.4/4.6/5.63/6.66)
+const CUR=[[3.0,[1500,1200]],[3.35,'#hs-input'],[4.3,'#hs-input'],[4.55,'#hs-add'],[5.2,'#hs-add'],[5.58,'#hs-check'],[6.2,'#hs-check'],[6.6,'#hs-ai'],[8.0,'#hs-ai'],[8.6,[1500,1200]]];
+const CLICKS=[3.4,4.6,5.63,6.66];
+/* ================================= */
+</script>
+<script src="subs.js" onerror="window.SUBS=null"></script><!-- scripts/subtitle_marks.py vo.tsv subs.json --keywords "…" -->
+<script src="engine.js"></script>
+<script>
+const {$}=Demo.H;
+// fit the footage into the stage according to FRAME (keeps the footage aspect ratio)
+(function(){const win=$('#win'),tb=$('#tb'),ar=FOOT.h/FOOT.w;
+  if(FRAME==='phone'){const H=880,W=Math.round(H/ar);tb.style.display='none';Object.assign(win.style,{width:W+'px',left:(960-W/2-14)+'px',top:'150px',borderRadius:'58px',border:'14px solid #111',boxShadow:'0 40px 110px rgba(0,0,0,.45),0 0 0 2px #333'});$('#recbox').style.width=W+'px';}
+  else{const W=Math.min(1280,Math.round(840/ar));win.style.width=W+'px';win.style.left=(960-W/2)+'px';$('#recbox').style.width=W+'px';
+    if(FRAME==='none'){tb.style.display='none';win.style.borderRadius='16px';}}})();
+$('#tt1').textContent=TXT.title;$('#tt2').textContent=TXT.sub;$('#url').textContent=TXT.url;$('#et1').textContent=TXT.end;$('#et2').textContent=TXT.endSub;$('#cta').textContent=TXT.cta;
+const CAM=[];SHOTS.forEach((s,i)=>{CAM.push(s);const nx=SHOTS[i+1];if(nx&&nx[0]-s[0]>2.2)CAM.push([nx[0]-1.2,s[1],s[2]*1.04]);});
+Demo.init({camBounds:'#win',duration:16,accent:'#8b5cf6',
+ /* COMMERCIAL LAYER: notes = callouts in footage px; footage[0].clock = real-time work clock for sped-up waits (replaces ⏩×N);
+    cursorTrack = big smooth cursor on the real pointer path (scripts/cursor_track.py); typing = reveal pasted text glyph by glyph.
+    Run scripts/commercial_qa.py before rendering. */
+ notes:[{t0:9.2,t1:12.4,box:HOT['#hs-plan'],label:'AI 几秒排好今日计划',side:'bottom'}],camIn:[2.2,3.0],camOut:[12.9,13.6],cam:CAM,maxZoom:1.8,viaWide:1.0,camSfx:'off',
+ spotlight:{dim:0.4,blur:1.0,color:'250,248,255',fadeIn:1.0,fadeOut:0.8}   /* light UI → light veil; dark UI → color:'10,8,16', dim:0.35 */,spots:SPOTS,cursor:CUR,clicks:CLICKS,
+ footage:[{el:'#rec',...FOOT,map:MAP,hotspots:HOT}],
+ captions:[[3.6,6.4,TXT.caps[0]],[6.6,8.9,TXT.caps[1]],[9.0,12.7,TXT.caps[2]]],
+ sfx:[[0.3,'swish',0.5],[2.3,'whoosh',0.45],[8.4,'chime',0.7],[13.7,'shimmer',0.9]],
+ scene(t,H){const k=H.eo(H.p(t,0.3,1.0))*(1-H.p(t,1.9,2.3));$('#title').style.opacity=k;$('#title').style.transform=`translateY(${(1-k)*20}px)`;},
+ post(t,H){const e=H.eo(H.p(t,13.7,14.4));$('#end').style.opacity=e;$('#end').style.transform=`scale(${H.lerp(.95,1,e)})`;}});
+</script></body></html>

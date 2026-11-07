@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Commercial-quality gate for ANY demo page (simulated UI or real footage). Run before rendering; fix every FAIL.
+
+usage: commercial_qa.py site/index.html [--lang zh] [--frames 24]
+Checks (automatic):
+  hook          something readable on screen before 3 s (not a blank/logo-only opening)
+  length        ≤ 100 s for one storyline (longer → offer a 60–90 s cut), ≥ 10 s
+  subtitles     VO-synced subtitles configured (subtitle_marks.py → subs.js) and covering ≥ 35 % of the runtime
+  headlines     headline captions ≤ 3.5 s each (except 'hold'), on screen ≤ 55 % of the runtime (restraint)
+  spotlight     dim ≤ 0.4, blur ≤ 1.6 (murky films read as amateur)
+  framing       camBounds set, no minimap; shot_qa.py 0 issues; camera_qa.py 0 direction reversals
+  clutter       ≤ 3 overlay layers at once (headline, subtitles, callouts, clock, cards, badges)
+  text size     ≥ 70 % of visible UI text ≥ 14 px on screen during camera holds (phone viewers)
+  brightness    mean luma of content frames ≥ 30 (dark UIs look darker on video)
+  end card      exactly ONE call-to-action visible in the last 3 s; cursor hidden on the end card
+  focus aids    at least one callout (notes) or spotlight in a ≥ 20 s film
+Manual (always listed): licensed music, human/natural VO, facts & brand review, 3–5 viewers on a phone.
+Exit code 1 if any FAIL.
+"""
+import argparse, os, re, subprocess, sys, io
+import numpy as np
+from PIL import Image
+from playwright.sync_api import sync_playwright
+
+S = os.path.dirname(os.path.abspath(__file__))
+OVER = ['#cap', '#subs', '#speed', '[id^="dnB"]', '.card', '#mm', '#persona']
+CTA_RE = r'(下载|免费|试用|立即|开始使用|打开|预约|联系|\bGet started\b|\bTry\b|\bDownload\b|\bSign up\b|\bBook\b|\bStart free\b|\bLearn more\b|\bOpen\b)'
+
+def run(cmd):
+    r = subprocess.run(cmd, capture_output=True, text=True); return r.stdout + r.stderr
+
+def main():
+    a = argparse.ArgumentParser(); a.add_argument('page'); a.add_argument('--lang', default='zh'); a.add_argument('--frames', type=int, default=24)
+    o = a.parse_args(); res = []
+    def add(name, ok, msg, warn=False): res.append((name, 'PASS' if ok else ('WARN' if warn else 'FAIL'), msg))
+    with sync_playwright() as p:
+        b = p.chromium.launch(channel='chrome'); pg = b.new_page(viewport={'width': 1920, 'height': 1080})
+        pg.goto('file://' + os.path.abspath(o.page) + f'?lang={o.lang}'); pg.wait_for_timeout(900)
+        if not pg.evaluate('!!window.DEMO_CFG'):
+            print('SKIP  not an engine page (window.DEMO_CFG missing — legacy inline renderer). Port it to templates/demo.html to get the'); print('      commercial layer (subtitles, callouts, clock, framing rules, declutter) and this check.'); sys.exit(2)
+        C = pg.evaluate('''(()=>{const C=window.DEMO_CFG;return {dur:C.duration,caps:(C._caps||C.captions).map(c=>[c[0],c[1],c[3]||'']),
+            subs:C.subtitles?C.subtitles.items.map(s=>[s.t0,s.t1]):null,sp:C.spotlight||null,spots:(C.spots||[]).length,cb:C.camBounds||null,
+            mm:!!C.minimap,notes:(C.notes||[]).length,camIn:C.camIn||null,camOut:C.camOut||null,foot:!!(C.footage&&C.footage.length)}})()''')
+        D = C['dur']
+        # hook
+        pg.evaluate('render(1.5)'); pg.wait_for_timeout(60)
+        chars = pg.evaluate('''(()=>{let n=0;const w=document.createTreeWalker(document.querySelector('#stage'),NodeFilter.SHOW_TEXT);let nd;while(nd=w.nextNode()){const t=nd.textContent.trim();if(!t)continue;
+            const e=nd.parentElement,r=e.getBoundingClientRect();if(r.width<2||r.bottom<0||r.top>1080||r.right<0||r.left>1920)continue;let x=e,op=1;while(x&&x!==document.body){op*=+getComputedStyle(x).opacity;x=x.parentElement;}if(op>0.5)n+=t.length;}return n})()''')
+        add('hook', chars >= 6 or any(c[0] < 3 for c in C['caps']), f'{chars} readable chars at 1.5 s')
+        add('length', 10 <= D <= 100, f'{D:.0f} s' + ('' if D <= 100 else ' — one storyline rarely needs > 90 s; offer a 60–90 s cut + 15–30 s social cut'), warn=D > 100)
+        sc = sum(b_ - a_ for a_, b_ in C['subs']) / D if C['subs'] else 0
+        add('subtitles', sc >= 0.35, f'cover {sc:.0%} of runtime' if C['subs'] else 'missing → subtitle_marks.py vo.tsv subs.json → <script src="subs.js"> (OK only for music-only films)', warn=not C['subs'])
+        long = [c for c in C['caps'] if c[1] - c[0] > 3.5 and c[2] != 'hold']; cov = sum(c[1] - c[0] for c in C['caps']) / D
+        add('headlines', not long and cov <= 0.55, f'{len(C["caps"])} cards, on screen {cov:.0%} of runtime' + (f', {len(long)} longer than 3.5 s' if long else ''))
+        sp = C['sp'] or {}
+        add('spotlight', (sp.get('dim', 0.35) <= 0.4 and sp.get('blur', 1.2) <= 1.6), f"dim {sp.get('dim', 'default 0.35')}, blur {sp.get('blur', 'default 1.2')}")
+        qa = run([sys.executable, f'{S}/shot_qa.py', o.page]); m = re.search(r'(\d+) holds checked, (\d+) with issues', qa)
+        cq = run([sys.executable, f'{S}/camera_qa.py', o.page]); m2 = re.search(r'reversals \(jitter\): (\d+)', cq)
+        add('framing', bool(C['cb']) and not C['mm'] and m and m.group(2) == '0' and m2 and m2.group(1) == '0',
+            f"camBounds={C['cb']}, minimap={'on' if C['mm'] else 'off'}, shot_qa {m.group(2) if m else '?'}/{m.group(1) if m else '?'} issues, jitter {m2.group(1) if m2 else '?'}")
+        # sample frames
+        lo, hi = (C['camIn'] or [3, 3])[1], (C['camOut'] or [D - 4])[0]
+        ts = list(np.linspace(lo + 0.3, max(lo + 0.6, hi - 0.3), o.frames))
+        maxover, overt, small, total, lum = 0, None, 0, 0, []
+        for t in ts:
+            pg.evaluate(f'render({t:.3f})'); pg.wait_for_timeout(40)
+            n = pg.evaluate('''(sels)=>{let n=0;for(const q of sels)for(const e of document.querySelectorAll(q)){let x=e,op=1;while(x&&x!==document.body){op*=+getComputedStyle(x).opacity;x=x.parentElement;}
+                const r=e.getBoundingClientRect();if(op>0.3&&r.width>4&&r.right>0&&r.left<1920&&r.bottom>0&&r.top<1080){n++;break;}}return n}''', OVER)
+            if n > maxover: maxover, overt = n, t
+            sz = pg.evaluate('''(()=>{let s=0,a=0;const W=document.querySelector('#win')||document.querySelector('#stage');for(const e of W.querySelectorAll('*')){if(e.children.length)continue;const t=(e.textContent||'').trim();if(!t)continue;
+                const r=e.getBoundingClientRect();if(r.width<2||r.bottom<0||r.top>1080||r.right<0||r.left>1920)continue;if(e.tagName==='IMG')continue;let x=e,op=1;while(x&&x!==document.body){op*=+getComputedStyle(x).opacity;x=x.parentElement;}if(op<0.5)continue;
+                const fs=parseFloat(getComputedStyle(e).fontSize),k=e.offsetHeight?r.height/e.offsetHeight:1,px=fs*k;a+=t.length;if(px<14)s+=t.length;}return [s,a]})()''')
+            small += sz[0]; total += sz[1]
+            png = pg.screenshot(); lum.append(np.asarray(Image.open(io.BytesIO(png)).convert('L')).mean())
+        add('clutter', maxover <= 3, f'max {maxover} overlay layers at once' + (f' (t={overt:.1f}s)' if overt else ''))
+        if total and not C['foot']:
+            add('text size', small / total <= 0.3, f'{1 - small / total:.0%} of visible UI text ≥ 14 px on screen')
+        elif C['foot']:
+            add('text size', False, 'real footage: check recording zoom (125–150 % UI scale) by eye', warn=True)
+        add('brightness', np.mean(lum) >= 30, f'mean luma {np.mean(lum):.1f}')
+        # end card
+        pg.evaluate(f'render({D - 0.8:.2f})'); pg.wait_for_timeout(60)
+        ctas = pg.evaluate('''(re)=>{const R=new RegExp(re,'i');const seen=[];for(const e of document.querySelectorAll('#stage *')){if(e.children.length&&!e.className.toString().includes('cta'))continue;const t=(e.textContent||'').trim();
+            if(!t||!R.test(t))continue;const r=e.getBoundingClientRect();if(r.width<2)continue;let x=e,op=1;while(x&&x!==document.body){op*=+getComputedStyle(x).opacity;x=x.parentElement;}if(op>0.5&&!seen.some(s=>s.includes(t)||t.includes(s)))seen.push(t);}return seen}''', CTA_RE)
+        cur = pg.evaluate('''(()=>{for(const q of ['#cursor','#tcur']){const e=document.querySelector(q);if(e&&+getComputedStyle(e).opacity>0.1)return q}return null})()''')
+        add('end card', len(ctas) == 1 and not cur, f'CTAs: {ctas or "none"}' + (f'; cursor {cur} visible on end card' if cur else ''), warn=len(ctas) > 1 and not cur)
+        # end-card text stability: text that DRIFTS by < 0.5 px per frame (slow zoom/pan on a card) re-rasterises every frame and
+        # visibly shimmers. Big moves (entrances) and zero moves (static) are fine. Subtitles are excluded.
+        fps = pg.evaluate('window.FPS||30'); worst = (0, ''); hits = {}
+        for t in np.linspace(D - 2.0, D - 0.2, 7):
+            r = pg.evaluate(f'''(()=>{{const get=()=>{{const o=[];const w=document.createTreeWalker(document.querySelector('#stage'),NodeFilter.SHOW_TEXT);let nd;
+                while(nd=w.nextNode()){{const e=nd.parentElement;if(!nd.textContent.trim()||e.closest('#subs'))continue;if(parseFloat(getComputedStyle(e).fontSize)<18)continue;
+                let x=e,op=1;while(x&&x!==document.body){{op*=+getComputedStyle(x).opacity;x=x.parentElement;}}if(op<0.9)continue;const q=e.getBoundingClientRect();
+                if(q.width>20&&q.top>0&&q.bottom<1080)o.push([nd.textContent.trim().slice(0,24),q.left,q.top,q.width,q.height]);}}return o}};
+                render({t:.4f});const a=get();render({t + 1 / fps:.4f});const b=get();const out=[];
+                for(const A of a){{const B=b.find(x=>x[0]===A[0]);if(!B)continue;const d=Math.max(...[1,2,3,4].map(i=>Math.abs(A[i]-B[i])));out.push([A[0],d]);}}return out}})()''')
+            for name, d in r:
+                if 0.02 < d < 0.5: hits[name] = hits.get(name, 0) + 1; worst = max(worst, (d, name)) if hits[name] >= 3 else worst
+        # sustained drift only (≥3 of 7 samples): the tail of an entrance ease-out is briefly sub-pixel and is fine
+        add('end card stable', worst[0] == 0, 'no sub-pixel text drift in the last 2 s' if worst[0] == 0 else
+            f'"{worst[1]}" drifts {worst[0]:.2f} px/frame → text shimmers; hold the card still after its entrance (no slow zoom/pan on text)')
+        add('focus aids', D < 20 or C['notes'] > 0 or C['spots'] > 0 or bool(C['sp']), f"{C['notes']} callouts, {C['spots']} spots", warn=True)
+        b.close()
+    w = max(len(r[0]) for r in res)
+    for n, s, msg in res: print(f'{s:4}  {n:<{w}}  {msg}')
+    sc = sum(r[1] == 'PASS' for r in res)
+    print(f'\nscore {sc}/{len(res)} automatic checks passed')
+    print('MANUAL  licensed music · natural/human VO · facts, numbers & brand review · disclaimer for simulated UI/data · 3–5 viewers on a phone')
+    sys.exit(1 if any(r[1] == 'FAIL' for r in res) else 0)
+
+if __name__ == '__main__':
+    main()
