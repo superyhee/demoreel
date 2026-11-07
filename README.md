@@ -116,7 +116,7 @@ Everything is a pure function of time `t`, so any frame range renders independen
 
 ## Contributing
 
-Issues and PRs welcome — especially: recorders tested on Linux/Windows/Android, new templates (mobile, terminal, dashboard), multi-aspect (9:16 / 1:1) reframing, and real-world before/after demos.
+Issues and PRs welcome — start with a [**good first issue**](https://github.com/superyhee/demoreel/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) (Windows/Linux recording tests, terminal & mobile templates, a before/after showcase). Especially wanted: recorders tested on Linux/Windows/Android, new templates (mobile, terminal, dashboard), multi-aspect (9:16 / 1:1) reframing, and real-world before/after demos.
 
 If DemoReel saved you a week of video editing, a ⭐ helps others find it.
 
