@@ -39,10 +39,13 @@ def worker(page, lang, f0, f1, seg_path, crf, preset, frames_dir):
                 ff.stdin.write(png)
                 if frames_dir:
                     with open(os.path.join(frames_dir, f'f{f:04d}.png'), 'wb') as fh: fh.write(png)
-            ff.stdin.close()
         except BrokenPipeError:
             pass   # ffmpeg died; its own stderr above has the reason, the return code below reports it
+        except BaseException:
+            ff.kill(); raise   # page/CDP error: don't leave ffmpeg waiting on stdin
         finally:
+            try: ff.stdin.close()
+            except BrokenPipeError: pass
             ff.wait(); b.close()
         if ff.returncode: sys.exit(f'ffmpeg failed (exit {ff.returncode}) for segment {seg_path} at frames {f0}-{f1}')
 
@@ -79,8 +82,15 @@ def main():
             seg = os.path.join(tmp, f'seg{i:02d}.mp4')
             procs.append((seg, subprocess.Popen([sys.executable, os.path.abspath(__file__), o.page, o.out, '--lang', o.lang,
                          '--crf', str(o.crf), '--preset', o.preset, '--_w', str(bounds[i]), str(bounds[i + 1]), seg, o.frames_dir or '-'])))
-        bad = [s for s, pr in procs if pr.wait() != 0]
-        if bad: sys.exit(f'{len(bad)} segment(s) failed: {bad}')
+        # poll all workers instead of joining them in launch order: the first failure aborts the whole render at once
+        live = list(procs)
+        while live:
+            for seg, pr in list(live):
+                rc = pr.poll()
+                if rc is None: continue
+                live.remove((seg, pr))
+                if rc != 0: sys.exit(f'segment {seg} failed (exit {rc}); stopping the other workers')
+            time.sleep(0.2)
         lst = os.path.join(tmp, 'list.txt')
         with open(lst, 'w') as fh: fh.write(''.join(f"file '{s}'\n" for s, _ in procs))
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', lst, '-c', 'copy', '-movflags', '+faststart', o.out], check=True)

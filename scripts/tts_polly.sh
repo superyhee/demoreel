@@ -20,7 +20,12 @@ while IFS=$'\t' read -r st text; do
   ms=$(python3 -c 'import sys;print(int(float(sys.argv[1])*1000))' "$st")
   inputs+=(-i $W/v$i.mp3); filt+="[${i}]adelay=${ms}|${ms}[a${i}];"; i=$((i+1))
 done < "$TSV"
-python3 -c "import sys;s=[float(x) for x in '${starts[*]}'.split()];d=[float(x) for x in '${durs[*]}'.split()];[print(f'WARN: line {k} ends {s[k]+d[k]:.2f}s, next starts {s[k+1]}s -> shorten it') for k in range(len(s)-1) if s[k]+d[k]>s[k+1]-0.1];print(f'last line ends {s[-1]+d[-1]:.2f}s')"
+[ "$i" -gt 0 ] || { echo "ERROR: no lines with text found in $TSV" >&2; exit 1; }
+# arrays go in as argv (never spliced into Python source): starts... -- durs...
+python3 -c 'import sys
+a=sys.argv[1:];m=a.index("--");s=[float(x) for x in a[:m]];d=[float(x) for x in a[m+1:]]
+[print(f"WARN: line {k} ends {s[k]+d[k]:.2f}s, next starts {s[k+1]}s -> shorten it") for k in range(len(s)-1) if s[k]+d[k]>s[k+1]-0.1]
+print(f"last line ends {s[-1]+d[-1]:.2f}s")' "${starts[@]}" -- "${durs[@]}"
 mix=""; for ((k=0;k<i;k++)); do mix+="[a$k]"; done
 ffmpeg -v error -y "${inputs[@]}" -filter_complex "${filt}${mix}amix=inputs=$i:normalize=0,aformat=channel_layouts=stereo:sample_rates=44100,apad=whole_dur=$DUR" -t $DUR "$OUT"
 echo "vo -> $OUT"
