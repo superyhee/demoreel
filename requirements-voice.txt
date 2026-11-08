@@ -1,0 +1,5 @@
+# optional: local TTS (Kokoro) + subtitle alignment for any engine
+kokoro>=0.9
+misaki[zh]
+soundfile
+faster-whisper

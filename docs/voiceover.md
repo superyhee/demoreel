@@ -1,4 +1,32 @@
-# Voice-over & subtitles setup (Amazon Polly)
+# Voice-over & subtitles setup
+
+## Pick an engine — one command for all of them
+
+```bash
+python3 scripts/tts.py vo.tsv vo.wav --provider <P> --lang zh|en [--voice V] [--speed 1.0] --duration 30
+python3 scripts/align_subs.py vo.manifest.json site/subs.json --lang zh --keywords "关键词,…"   # subtitles for ANY engine
+```
+
+| `--provider` | Quality | Chinese | Needs | Default voices (zh / en) |
+|---|---|---|---|---|
+| `azure` | ★★★★ | ★★★★★ | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (free tier) | `zh-CN-XiaoxiaoNeural` / `en-US-AvaMultilingualNeural` |
+| `elevenlabs` | ★★★★★ | good | `ELEVENLABS_API_KEY` | `21m00Tcm4TlvDq8ikWAM` (any voice id, `--model eleven_multilingual_v2`) |
+| `openai` | ★★★★ | ok | `OPENAI_API_KEY` | `coral` (+ `--instructions "friendly product demo"`) |
+| `polly` | ★★★ (generative ★★★★) | ok | AWS CLI credentials (below) | `Zhiyu` / `Ruth` (`--model neural|generative`) |
+| `kokoro` | ★★★★ | yes | local, free, Apache-2.0 model — `pip install kokoro "misaki[zh]" soundfile` (≈330 MB download on first run) | `zf_xiaoxiao` / `af_heart` |
+| `say` | ★★ | yes | macOS `say` / Linux `espeak-ng` — offline drafts | `Tingting` / `Samantha` |
+
+- Keys are read **only from environment variables** (never from files in the project); `tts.py` never prints them.
+- Every engine's output is loudness-normalised to **−19 LUFS**, so `mix.sh`'s voice/music balance doesn't change when you switch.
+- `align_subs.py` (local faster-whisper, `pip install faster-whisper`, model downloads on first run) gives word timing for any
+  engine — or for a **human VO recording**: `align_subs.py --tsv vo.tsv --audio vo.wav site/subs.json`. The screen always shows
+  your script text; the recognizer only supplies timing. Measured against Polly speech marks: mean error **50 ms**, p90 130 ms.
+- Kokoro/whisper pull PyTorch; a venv keeps it isolated: `python3 -m venv ~/.cache/demoreel-venv && ~/.cache/demoreel-venv/bin/pip install torch kokoro "misaki[zh]" soundfile faster-whisper`.
+- Engine prices and model licences change — check the provider's pricing page / model card before publishing.
+
+---
+
+# Amazon Polly setup (`tts_polly.sh`, `subtitle_marks.py`, `tts.py --provider polly`)
 
 DemoReel voices your film with **Amazon Polly** (`scripts/tts_polly.sh`) and times the dynamic subtitles with Polly
 **speech marks** (`scripts/subtitle_marks.py`). No AWS account? Use the offline fallback (`scripts/tts_say.sh`) — see the end.

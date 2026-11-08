@@ -129,7 +129,11 @@ when the footage didn't scroll to it; end card = 3–4 outcome numbers counted u
 Notes: headless recordings have NO mouse pointer → add the engine cursor on hotspots at the click times (convert recording times with the MAP). Light UIs need softer spotlight (`dim≈0.3, fadeIn 1.0, fadeOut 0.8`). Mix both paths freely: real footage for the core flow, rebuilt UI for things you can't record.
 
 ## Phase 6 — Audio
+Any TTS engine (azure / elevenlabs / openai / polly / kokoro local / say) + subtitles for any engine or a human VO — docs/voiceover.md:
 ```bash
+python3 $S/tts.py vo_zh.tsv vo_zh.wav --provider kokoro --lang zh --duration 30          # → vo_zh.wav + vo_zh.manifest.json (−19 LUFS)
+python3 $S/align_subs.py vo_zh.manifest.json site/subs_zh.json --lang zh --keywords "…"   # faster-whisper word timing, script text kept
+# classic Polly-only path:
 $S/tts_polly.sh vo_zh.tsv vo_zh.wav Zhiyu neural cmn-CN 30       # zh (neural)
 $S/tts_polly.sh vo_en.tsv vo_en.wav Ruth generative "" 30         # en (generative; Matthew = male)
 $S/tts_say.sh   vo_zh.tsv vo_zh.wav Tingting 210 30               # offline fallback (robotic)
