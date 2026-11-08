@@ -66,6 +66,9 @@ pip install playwright numpy pillow scipy opencv-python   # uses your installed 
 #    "用 demoreel 给我的 app 做一个 30 秒的产品演示视频"  /  "Make a 30-second product demo of my app"
 ```
 
+**Voice-over (optional):** Amazon Polly via the AWS CLI — one IAM permission (`polly:SynthesizeSpeech`), ~1 cent per film.
+Setup, voices, regions and troubleshooting: **[docs/voiceover.md](docs/voiceover.md)**. No AWS? `tts_say.sh` works offline.
+
 Or drive it by hand:
 
 ```bash
@@ -119,6 +122,10 @@ Everything is a pure function of time `t`, so any frame range renders independen
 Issues and PRs welcome — start with a [**good first issue**](https://github.com/superyhee/demoreel/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) (Windows/Linux recording tests, terminal & mobile templates, a before/after showcase). Especially wanted: recorders tested on Linux/Windows/Android, new templates (mobile, terminal, dashboard), multi-aspect (9:16 / 1:1) reframing, and real-world before/after demos.
 
 If DemoReel saved you a week of video editing, a ⭐ helps others find it.
+
+## Security
+
+Recording tools capture whatever is on screen — use a demo account, and see [SECURITY.md](SECURITY.md) for safe-recording tips and private vulnerability reporting.
 
 ## License
 

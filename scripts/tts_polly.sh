@@ -4,12 +4,16 @@
 #   script.tsv lines: <start_seconds><TAB><text>      e.g.  5.5	AI writes your daily briefing.
 #   voices: en-US Ruth/Matthew (generative|neural), zh: Zhiyu (neural, cmn-CN), ja: Kazuha/Takumi (neural)
 # Prints each clip's duration and WARNs when a clip overruns the next start (shorten the line, don't speed up).
+#   setup (AWS CLI, credentials, IAM, region, cost): docs/voiceover.md   ·   offline alternative: tts_say.sh
 set -e
 TSV=$1; OUT=$2; VOICE=${3:-Ruth}; ENGINE=${4:-generative}; LC=${5:-}; DUR=${6:-30}
+REGION=${POLLY_REGION:-${AWS_REGION:-us-east-1}}   # us-east-1 offers every engine (standard/neural/long-form/generative)
+command -v aws >/dev/null || { echo "ERROR: AWS CLI not found → install it, or use the offline scripts/tts_say.sh (see docs/voiceover.md)" >&2; exit 2; }
+aws sts get-caller-identity >/dev/null 2>&1 || { echo "ERROR: no AWS credentials → run 'aws configure' (or set AWS_PROFILE); see docs/voiceover.md" >&2; exit 2; }
 W=$(mktemp -d); i=0; inputs=(); filt=""; starts=(); durs=()
 while IFS=$'\t' read -r st text; do
   [ -z "$text" ] && continue
-  aws polly synthesize-speech --region us-east-1 --engine $ENGINE --voice-id $VOICE ${LC:+--language-code $LC} \
+  aws polly synthesize-speech --region "$REGION" --engine "$ENGINE" --voice-id "$VOICE" ${LC:+--language-code "$LC"} \
      --output-format mp3 --sample-rate 24000 --text "$text" $W/v$i.mp3 >/dev/null
   d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 $W/v$i.mp3)
   starts+=($st); durs+=($d); echo "$i start=$st dur=$d  $text"

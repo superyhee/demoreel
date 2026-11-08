@@ -3,10 +3,11 @@ import sys
 """Word-timed subtitles from the VO script via Amazon Polly speech marks (same voice/engine as tts_polly.sh).
 Splits each line into short phrases (≤ --max chars, at punctuation; keeps the original punctuation) and writes
 subs.json: [{"t0":..,"t1":..,"words":[{"t":..,"text":".."},..]}, ..]  → Demo.init({subtitles:{items: <subs.json>}})
-usage: subtitle_marks.py vo.tsv subs.json [--voice Zhiyu] [--engine neural] [--lang cmn-CN] [--max 16]"""
+usage: subtitle_marks.py vo.tsv subs.json [--voice Zhiyu] [--engine neural] [--lang cmn-CN] [--max 16] [--region us-east-1]
+setup: docs/voiceover.md (AWS CLI + credentials with polly:SynthesizeSpeech)."""
 import argparse, json, subprocess, tempfile, os, re
 a=argparse.ArgumentParser(); a.add_argument('tsv'); a.add_argument('out'); a.add_argument('--voice',default='Zhiyu'); a.add_argument('--engine',default='neural')
-a.add_argument('--lang',default='cmn-CN'); a.add_argument('--keywords',default='',help='comma-separated words to accent'); a.add_argument('--max',type=int,default=16); a.add_argument('--region',default='us-east-1'); o=a.parse_args()
+a.add_argument('--lang',default='cmn-CN'); a.add_argument('--keywords',default='',help='comma-separated words to accent'); a.add_argument('--max',type=int,default=16); a.add_argument('--region',default=os.environ.get('POLLY_REGION',os.environ.get('AWS_REGION','us-east-1'))); o=a.parse_args()
 PUNCT=set('，。！？；：、,.!?;:')
 items=[]
 for line in open(o.tsv,encoding='utf-8'):

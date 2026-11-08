@@ -152,6 +152,7 @@ python3 $S/audio_qa.py music.wav vo.wav --gain 0.2                  # arc / sub 
 - Map cue points from the video timeline: `hit`=logo, `groove`=UI appears, `main`=first feature beat, `peak`=last 1–2 beats, `end`=end card.
 - Licensed music still beats it for public launches; music_pro is good enough for internal/demo-day/social drafts.
 - Check AWS identity first (`aws sts get-caller-identity`); Polly synthesize-speech creates no resources, cost ≈ cents.
+  Setup for new users (CLI, least-privilege IAM policy, region via POLLY_REGION, voices, troubleshooting): `docs/voiceover.md`.
 - If tts warns a line overruns the next start → **shorten the sentence** (don't speed the voice).
 - Ask the user for licensed music for anything published; synthesized music is the #1 thing that reads as amateur.
 

@@ -9,11 +9,13 @@ set -e; OUT=$1; SEC=$2; shift 2; MODE=$1; DRY=0; [[ " $* " == *" --dry-run "* ]]
 OS=$(uname -s); case "$OS" in MINGW*|MSYS*|CYGWIN*) OS=Windows;; esac
 if [ "$MODE" = "--window" ]; then APP=$2; TS=$3
   case $OS in
-    Darwin) B=$(osascript -e "tell application \"System Events\" to tell process \"$APP\" to get {position, size} of (first window whose name contains \"$TS\")" 2>/dev/null | tr -d ' ') || true
+    Darwin) esc(){ local s=${1//\\/\\\\}; printf '%s' "${s//\"/\\\"}"; }; APPQ=$(esc "$APP"); TSQ=$(esc "$TS")
+            B=$(osascript -e "tell application \"System Events\" to tell process \"$APPQ\" to get {position, size} of (first window whose name contains \"$TSQ\")" 2>/dev/null | tr -d ' ') || true
             IFS=, read -r LX LY LW LH <<<"$B"
             SCALE=$(python3 -c "import subprocess,re;o=subprocess.run(['system_profiler','SPDisplaysDataType'],capture_output=True,text=True).stdout;print(2 if 'Retina' in o else 1)")
             X=$((LX*SCALE)); Y=$((LY*SCALE)); W=$((LW*SCALE)); H=$((LH*SCALE));;
-    Linux)  WID=$(xdotool search --name "$TS" | head -1); eval $(xdotool getwindowgeometry --shell "$WID"); X=$X; Y=$Y; W=$WIDTH; H=$HEIGHT;;
+    Linux)  WID=$(xdotool search --name "$TS" | head -1)   # parse KEY=VALUE lines instead of eval-ing tool output
+            while IFS='=' read -r k v; do case $k in X) X=$v;; Y) Y=$v;; WIDTH) W=$v;; HEIGHT) H=$v;; esac; done < <(xdotool getwindowgeometry --shell "$WID");;
     Windows) X=; W=;;   # gdigrab can capture a window by title directly
   esac
 elif [ "$MODE" = "--region" ]; then X=$2; Y=$3; W=$4; H=$5; fi
