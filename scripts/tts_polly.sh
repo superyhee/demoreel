@@ -17,8 +17,8 @@ while IFS=$'\t' read -r st text; do
      --output-format mp3 --sample-rate 24000 --text "$text" $W/v$i.mp3 >/dev/null
   d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 $W/v$i.mp3)
   starts+=($st); durs+=($d); echo "$i start=$st dur=$d  $text"
-  ms=$(python3 -c "print(int(float('$st')*1000))")
-  inputs+=(-i $W/v$i.mp3); filt+="[$i]adelay=$ms|$ms[a$i];"; i=$((i+1))
+  ms=$(python3 -c 'import sys;print(int(float(sys.argv[1])*1000))' "$st")
+  inputs+=(-i $W/v$i.mp3); filt+="[${i}]adelay=${ms}|${ms}[a${i}];"; i=$((i+1))
 done < "$TSV"
 python3 -c "import sys;s=[float(x) for x in '${starts[*]}'.split()];d=[float(x) for x in '${durs[*]}'.split()];[print(f'WARN: line {k} ends {s[k]+d[k]:.2f}s, next starts {s[k+1]}s -> shorten it') for k in range(len(s)-1) if s[k]+d[k]>s[k+1]-0.1];print(f'last line ends {s[-1]+d[-1]:.2f}s')"
 mix=""; for ((k=0;k<i;k++)); do mix+="[a$k]"; done

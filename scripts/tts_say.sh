@@ -10,5 +10,5 @@ while IFS=$'\t' read -r st text; do [ -z "$text" ] && continue
   if [ $ENG = say ]; then say -v "$VOICE" -r "$RATE" -o $W/v$i.aiff "$text"; f=$W/v$i.aiff
   else espeak-ng -v "$VOICE" -s "$RATE" -w $W/v$i.wav "$text"; f=$W/v$i.wav; fi
   echo "$i start=$st dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 $f) $text"
-  ms=$(python3 -c "print(int(float('$st')*1000))"); inputs+=(-i $f); filt+="[$i]adelay=$ms|$ms[a$i];"; mix+="[a$i]"; i=$((i+1)); done < "$TSV"
+  ms=$(python3 -c 'import sys;print(int(float(sys.argv[1])*1000))' "$st"); inputs+=(-i $f); filt+="[${i}]adelay=${ms}|${ms}[a${i}];"; mix+="[a$i]"; i=$((i+1)); done < "$TSV"
 ffmpeg -v error -y "${inputs[@]}" -filter_complex "${filt}${mix}amix=inputs=$i:normalize=0,aformat=channel_layouts=stereo:sample_rates=44100,apad=whole_dur=$DUR" -t $DUR "$OUT"; echo "vo -> $OUT ($ENG)"
