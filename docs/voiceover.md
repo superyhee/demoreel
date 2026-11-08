@@ -12,12 +12,15 @@ python3 scripts/align_subs.py vo.manifest.json site/subs.json --lang zh --keywor
 | `azure` | ★★★★ | ★★★★★ | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (free tier) | `zh-CN-XiaoxiaoNeural` / `en-US-AvaMultilingualNeural` |
 | `elevenlabs` | ★★★★★ | good | `ELEVENLABS_API_KEY` | `21m00Tcm4TlvDq8ikWAM` (any voice id, `--model eleven_multilingual_v2`) |
 | `openai` | ★★★★ | ok | `OPENAI_API_KEY` | `coral` (+ `--instructions "friendly product demo"`) |
+| `minimax` | ★★★★★ (Chinese) | ★★★★★ | `MINIMAX_API_KEY` (+ `MINIMAX_API_HOST=api.minimax.io` for international keys; default `api.minimaxi.com`) | `female-chengshu-jingpin` / `English_Graceful_Lady` (300+ voices, `--model speech-02-hd`) |
 | `polly` | ★★★ (generative ★★★★) | ok | AWS CLI credentials (below) | `Zhiyu` / `Ruth` (`--model neural|generative`) |
 | `kokoro` | ★★★★ | yes | local, free, Apache-2.0 model — `pip install kokoro "misaki[zh]" soundfile` (≈330 MB download on first run) | `zf_xiaoxiao` / `af_heart` |
 | `say` | ★★ | yes | macOS `say` / Linux `espeak-ng` — offline drafts | `Tingting` / `Samantha` |
 
 - Keys are read **only from environment variables** (never from files in the project); `tts.py` never prints them.
-- Every engine's output is loudness-normalised to **−19 LUFS**, so `mix.sh`'s voice/music balance doesn't change when you switch.
+  On macOS keep them in the keychain instead of shell history: `security add-generic-password -a demoreel -s MINIMAX_API_KEY -w` (prompts),
+  then `export MINIMAX_API_KEY=$(security find-generic-password -a demoreel -s MINIMAX_API_KEY -w)`.
+- Clips are trimmed to the voice (engines pad up to ~2 s of silence) and the track is loudness-normalised to **−19 LUFS**, so `mix.sh`'s voice/music balance doesn't change when you switch.
 - `align_subs.py` (local faster-whisper, `pip install faster-whisper`, model downloads on first run) gives word timing for any
   engine — or for a **human VO recording**: `align_subs.py --tsv vo.tsv --audio vo.wav site/subs.json`. The screen always shows
   your script text; the recognizer only supplies timing. Measured against Polly speech marks: mean error **50 ms**, p90 130 ms.

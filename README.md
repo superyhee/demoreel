@@ -35,7 +35,7 @@ Screen recordings look amateur. Motion-design tools take days. DemoReel gives yo
 - 🔦 **One focus at a time** — spotlight (light veil for white UIs, soft dim for dark UIs), animated callout boxes + labels, a declutter rule that never shows more than 3 overlay layers.
 - 🖱️ **Screen-Studio-style cursor** — big, shadowed, tilting on motion, click squash + ripple; on real recordings the real pointer is tracked, erased and replaced.
 - 💬 **Word-timed dynamic subtitles** — for any TTS engine or a human VO (local forced alignment, ~50 ms accuracy), current word highlighted, keywords accented.
-- 🔊 **Sound that is half the film** — voice-over from Azure, ElevenLabs, OpenAI, Polly or local Kokoro, ducked under VO; procedural or library SFX (drop in Kenney CC0 packs, auto-ranked + auditioned); 5 music styles cued to the cut.
+- 🔊 **Sound that is half the film** — voice-over from Azure, ElevenLabs, OpenAI, MiniMax, Polly or local Kokoro, ducked under VO; procedural or library SFX (drop in Kenney CC0 packs, auto-ranked + auditioned); 5 music styles cued to the cut.
 - ✅ **A commercial-quality gate** — `commercial_qa.py` checks 12 things a reviewer would reject (hook in 3 s, headline restraint, on-screen text ≥ 14 px, brightness, framing, clutter, one CTA, end-card shimmer…) *before* you render.
 
 <div align="center">
@@ -67,7 +67,7 @@ pip install playwright numpy pillow scipy opencv-python   # uses your installed 
 #    "用 demoreel 给我的 app 做一个 30 秒的产品演示视频"  /  "Make a 30-second product demo of my app"
 ```
 
-**Voice-over (optional):** one command for **Azure, ElevenLabs, OpenAI, Amazon Polly, Kokoro (free, local) or `say`** —
+**Voice-over (optional):** one command for **Azure, ElevenLabs, OpenAI, MiniMax, Amazon Polly, Kokoro (free, local) or `say`** —
 `scripts/tts.py vo.tsv vo.wav --provider kokoro --lang en`, then `scripts/align_subs.py` gives word-timed subtitles for any engine
 (even a human recording). Keys via env vars only. Setup & voices: **[docs/voiceover.md](docs/voiceover.md)**.
 

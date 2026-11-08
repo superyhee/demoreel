@@ -3,13 +3,14 @@
 
 usage: tts.py vo.tsv out.wav --provider P [--voice V] [--lang L] [--duration S] [--model M] [--instructions "…"]
   vo.tsv lines: <start seconds><TAB><text>
-  P = polly | azure | elevenlabs | openai | kokoro | say          (setup + voices: docs/voiceover.md)
+  P = polly | azure | elevenlabs | openai | minimax | kokoro | say          (setup + voices: docs/voiceover.md)
 Writes out.wav (stereo 44.1 kHz, every line placed at its start) and out.manifest.json [{start,dur,text,clip}], clips in out_clips/.
 Then: align_subs.py out.manifest.json site/subs.json --lang zh   → word-timed subtitles for ANY provider.
 
 Credentials come ONLY from environment variables and are never printed or written:
   polly: AWS CLI credentials (AWS_PROFILE / SSO), POLLY_REGION      azure: AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
   elevenlabs: ELEVENLABS_API_KEY                                     openai: OPENAI_API_KEY
+  minimax: MINIMAX_API_KEY (+ MINIMAX_API_HOST=api.minimax.io for international accounts; default api.minimaxi.com)
   kokoro: local model (pip install kokoro "misaki[zh]" soundfile; first run downloads ~330 MB from Hugging Face)
   say: macOS `say` / Linux `espeak-ng` (offline, robotic — drafts only)
 """
@@ -20,7 +21,8 @@ SR = 44100
 DEFAULT_VOICE = {   # (zh, en)
     'polly': ('Zhiyu', 'Ruth'), 'azure': ('zh-CN-XiaoxiaoNeural', 'en-US-AvaMultilingualNeural'),
     'elevenlabs': ('21m00Tcm4TlvDq8ikWAM', '21m00Tcm4TlvDq8ikWAM'), 'openai': ('coral', 'coral'),
-    'kokoro': ('zf_xiaoxiao', 'af_heart'), 'say': ('Tingting', 'Samantha')}
+    'kokoro': ('zf_xiaoxiao', 'af_heart'), 'say': ('Tingting', 'Samantha'),
+    'minimax': ('female-chengshu-jingpin', 'English_Graceful_Lady')}
 
 def need(var):
     v = os.environ.get(var)
@@ -59,6 +61,16 @@ def synth(p, text, o, path):
         if o.instructions: body['instructions'] = o.instructions
         open(path, 'wb').write(http('https://api.openai.com/v1/audio/speech', json.dumps(body).encode(),
             {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}))
+    elif p == 'minimax':   # MiniMax T2A v2 — China platform api.minimaxi.com (default) or international api.minimax.io
+        key = need('MINIMAX_API_KEY'); host = os.environ.get('MINIMAX_API_HOST', 'api.minimaxi.com')
+        body = {'model': o.model or 'speech-02-hd', 'text': text, 'stream': False, 'language_boost': 'Chinese' if zh else 'English',
+                'voice_setting': {'voice_id': voice, 'speed': o.speed, 'vol': 1.0, 'pitch': 0},
+                'audio_setting': {'sample_rate': 32000, 'bitrate': 128000, 'format': 'mp3', 'channel': 1}}
+        r = json.loads(http(f'https://{host}/v1/t2a_v2', json.dumps(body).encode(), {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}))
+        br = r.get('base_resp', {})
+        if br.get('status_code') != 0 or not (r.get('data') or {}).get('audio'):
+            sys.exit(f"ERROR: minimax {br.get('status_code')}: {br.get('status_msg')} (key region? set MINIMAX_API_HOST=api.minimax.io for international keys)")
+        open(path, 'wb').write(bytes.fromhex(r['data']['audio']))
     elif p == 'kokoro':
         global _KP
         try: from kokoro import KPipeline; import soundfile as sf
@@ -71,9 +83,13 @@ def synth(p, text, o, path):
         if sys.platform == 'darwin': subprocess.run(['say', '-v', voice, '-r', str(int(180 * o.speed)), '-o', path, text], check=True)
         else: subprocess.run(['espeak-ng', '-v', 'zh' if zh else 'en-us', '-w', path, text], check=True)
 
-def decode(path):
+def decode(path, trim=True):
     raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', path, '-f', 'f32le', '-ac', '1', '-ar', str(SR), '-'], capture_output=True).stdout
-    return np.frombuffer(raw, np.float32).astype(float)
+    x = np.frombuffer(raw, np.float32).astype(float)
+    if trim and len(x):   # engines pad clips with silence (MiniMax up to ~2 s) → trim to the voice, keep 40 ms / 120 ms
+        env = np.convolve(np.abs(x), np.ones(441) / 441, 'same'); on = np.nonzero(env > 10 ** (-45 / 20) * max(env.max(), 1e-9) * 30)[0]
+        if len(on): x = x[max(0, on[0] - int(0.04 * SR)):min(len(x), on[-1] + int(0.12 * SR))]
+    return x
 
 def main():
     a = argparse.ArgumentParser(); a.add_argument('tsv'); a.add_argument('out')
@@ -82,12 +98,14 @@ def main():
     a.add_argument('--instructions', help='openai: delivery style, e.g. "friendly product demo, like a colleague showing you"')
     a.add_argument('--speed', type=float, default=1.0); a.add_argument('--lufs', type=float, default=-19); o = a.parse_args()
     clips = os.path.splitext(o.out)[0] + '_clips'; os.makedirs(clips, exist_ok=True)
-    ext = {'polly': 'mp3', 'elevenlabs': 'mp3', 'say': 'aiff' if sys.platform == 'darwin' else 'wav'}.get(o.provider, 'wav')
+    ext = {'polly': 'mp3', 'elevenlabs': 'mp3', 'minimax': 'mp3', 'say': 'aiff' if sys.platform == 'darwin' else 'wav'}.get(o.provider, 'wav')
     lines = [l.rstrip('\n').split('\t', 1) for l in open(o.tsv, encoding='utf-8') if '\t' in l and l.strip()]
     out = np.zeros(int(SR * o.duration)); man = []
     for i, (st, text) in enumerate(lines):
         st = float(st); path = os.path.join(clips, f'v{i:02d}.{ext}'); synth(o.provider, text, o, path)
-        x = decode(path); d = len(x) / SR; man.append({'start': st, 'dur': round(d, 3), 'text': text, 'clip': os.path.abspath(path)})
+        x = decode(path); d = len(x) / SR; path = os.path.splitext(path)[0] + '_trim.wav'
+        w = wave.open(path, 'wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes()); w.close()
+        man.append({'start': st, 'dur': round(d, 3), 'text': text, 'clip': os.path.abspath(path)})
         j = int(st * SR); k = min(len(out), j + len(x)); out[j:k] += x[:k - j]
         print(f'{i:2d} start={st:6.2f} dur={d:5.2f}  {text}')
     for k in range(len(man) - 1):
