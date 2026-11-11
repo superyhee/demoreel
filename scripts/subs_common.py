@@ -26,5 +26,8 @@ def write(items, out, keywords=''):
     json.dump(items, open(out, 'w'), ensure_ascii=False, indent=0)
     kw = [k.strip() for k in keywords.split(',') if k.strip()]
     open(os.path.splitext(out)[0] + '.js', 'w').write('window.SUBS=' + json.dumps(items, ensure_ascii=False) + ';window.SUBS_KW=' + json.dumps(kw, ensure_ascii=False) + ';\n')
-    print(f'{len(items)} subtitle phrases → {out} (+ .js)')
+    ts = lambda t: '%02d:%02d:%02d,%03d' % (int(t // 3600), int(t % 3600 // 60), int(t % 60), int(round(t % 1 * 1000)) % 1000)
+    srt = os.path.splitext(out)[0] + '.srt'   # for players / platforms with native captions (YouTube, LinkedIn, WeChat Channels)
+    open(srt, 'w').write('\n'.join(f"{i + 1}\n{ts(x['t0'])} --> {ts(x['t1'])}\n{''.join(w['text'] for w in x['words']).strip()}\n" for i, x in enumerate(items)))
+    print(f'{len(items)} subtitle phrases → {out} (+ .js, .srt)')
     for x in items[:6]: print(f"  {x['t0']:7.2f}–{x['t1']:7.2f}  {''.join(w['text'] for w in x['words'])}")

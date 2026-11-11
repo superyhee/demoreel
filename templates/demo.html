@@ -40,7 +40,7 @@ h1{font-size:40px;font-weight:300;margin-bottom:24px}
 .item svg{color:var(--accent);font-size:20px}
 .tag{margin-left:auto;font-size:14px;padding:2px 10px;border-radius:999px;border:1.5px solid #d13212;color:#d13212;background:#fff2ef}
 #btn{display:inline-flex;gap:8px;align-items:center;margin-top:12px;background:var(--selInk);color:#fff;font-size:18px;font-weight:600;padding:12px 20px;border-radius:10px}
-#result{margin-top:18px;border:1.5px solid #c9b8ff;border-radius:12px;padding:16px 20px;background:#faf7ff;font-size:18px;line-height:1.7;overflow:hidden}
+#result{margin-top:18px;border:1.5px solid #c9b8ff;border-radius:12px;padding:16px 20px;background:#faf7ff;font-size:18px;line-height:1.7;overflow:hidden;min-height:96px}   /* fixed layout: camera targets keep their size */
 </style></head><body>
 <div id="stage">
   <div class="orb" id="o1" style="width:900px;height:700px;background:#e9defe"></div>
@@ -99,8 +99,8 @@ Demo.init({
   $('#logoWrap img').style.transform=`scale(${H.pop(t,2.95,0.5)})`;
   [0,1,2].forEach(i=>{const k=H.eo(H.p(t,5.1+i*0.3,5.6+i*0.3));const e=$('#it'+i);e.style.opacity=k;e.style.transform=`translateX(${(1-k)*120}px)`;});
   $('#btn').style.background=t>8.75?'#2a12a8':'';$('#btn').style.transform=t>8.75&&t<8.87?'scale(.94)':'';
-  $('#rt').textContent=H.typed(L.result,H.p(t,9.0,10.6))+H.caret(t,8.9,11);
-  H.grow($('#result'),H.eio(H.p(t,8.85,9.2)));
+  H.stream($('#rt'),t,9.0,10.6,L.result,{post:0.4});
+  H.reveal($('#result'),t,8.85,{d:0.35,dy:10});   // layout stays → the hold on #result is still (no re-framing, no text shimmer)
  },
  post(t,H){
   const en=H.eo(H.p(t,12.8,13.4));$('#end').style.opacity=en;$('#end').style.filter=`blur(${(1-en)*10}px)`;

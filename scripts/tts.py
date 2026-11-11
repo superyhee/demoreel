@@ -14,7 +14,7 @@ Credentials come ONLY from environment variables and are never printed or writte
   kokoro: local model (pip install kokoro "misaki[zh]" soundfile; first run downloads ~330 MB from Hugging Face)
   say: macOS `say` / Linux `espeak-ng` (offline, robotic — drafts only)
 """
-import argparse, json, os, subprocess, sys, tempfile, wave, urllib.request, urllib.error, html
+import argparse, json, os, subprocess, sys, tempfile, time, wave, urllib.request, urllib.error, html
 import numpy as np
 
 SR = 44100
@@ -29,19 +29,33 @@ def need(var):
     if not v: sys.exit(f'ERROR: set {var} in your environment (see docs/voiceover.md) — keys are never read from files in this repo')
     return v
 
+BACKOFF = [20, 40, 65, 65]   # seconds; rate limits (HTTP 429 / MiniMax 1002 RPM) are retried instead of failing the whole run
+_PACE = {'gap': float(os.environ.get('TTS_MIN_INTERVAL', 0)), 'last': 0.0}   # adaptive: after the first rate limit, space requests
+
+def _paced():
+    w = _PACE['gap'] - (time.time() - _PACE['last'])
+    if w > 0: time.sleep(w)
+    _PACE['last'] = time.time()
+
+def _limited(wait):   # called on a rate-limit hit: from now on keep ≥ 3.5 s between requests so later lines don't hit it again
+    _PACE['gap'] = max(_PACE['gap'], 3.5); print(f'  rate limited → retry in {wait} s, then pacing requests {_PACE["gap"]:.1f} s apart', file=sys.stderr); time.sleep(wait)
+
 def http(url, body, headers, timeout=60):
-    req = urllib.request.Request(url, data=body, headers=headers, method='POST')
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r: return r.read()
-    except urllib.error.HTTPError as e:
-        sys.exit(f'ERROR: {url.split("/")[2]} returned HTTP {e.code}: {e.read()[:300].decode("utf-8", "ignore")}')
+    for i in range(len(BACKOFF) + 1):
+        req = urllib.request.Request(url, data=body, headers=headers, method='POST'); _paced()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r: return r.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and i < len(BACKOFF):
+                _limited(BACKOFF[i]); continue
+            sys.exit(f'ERROR: {url.split("/")[2]} returned HTTP {e.code}: {e.read()[:300].decode("utf-8", "ignore")}')
 
 def synth(p, text, o, path):
     zh = o.lang.lower().startswith(('zh', 'cmn'))
     voice = o.voice or DEFAULT_VOICE[p][0 if zh else 1]
     if p == 'polly':
         region = os.environ.get('POLLY_REGION', os.environ.get('AWS_REGION', 'us-east-1'))
-        cmd = ['aws', 'polly', 'synthesize-speech', '--region', region, '--engine', o.model or 'neural', '--voice-id', voice,
+        cmd = ['aws', 'polly', 'synthesize-speech', '--region', region, '--engine', o.model or ('neural' if zh else 'generative'), '--voice-id', voice,
                '--output-format', 'mp3', '--sample-rate', '24000', '--text', text]
         if o.lang: cmd += ['--language-code', {'zh': 'cmn-CN', 'en': 'en-US'}.get(o.lang, o.lang)]
         r = subprocess.run(cmd + [path], capture_output=True, text=True)
@@ -66,8 +80,11 @@ def synth(p, text, o, path):
         body = {'model': o.model or 'speech-02-hd', 'text': text, 'stream': False, 'language_boost': 'Chinese' if zh else 'English',
                 'voice_setting': {'voice_id': voice, 'speed': o.speed, 'vol': 1.0, 'pitch': 0},
                 'audio_setting': {'sample_rate': 32000, 'bitrate': 128000, 'format': 'mp3', 'channel': 1}}
-        r = json.loads(http(f'https://{host}/v1/t2a_v2', json.dumps(body).encode(), {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}))
-        br = r.get('base_resp', {})
+        for i in range(len(BACKOFF) + 1):
+            r = json.loads(http(f'https://{host}/v1/t2a_v2', json.dumps(body).encode(), {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}))
+            br = r.get('base_resp', {})
+            if br.get('status_code') != 1002 or i == len(BACKOFF): break   # 1002 = RPM rate limit → back off and retry
+            _limited(BACKOFF[i])
         if br.get('status_code') != 0 or not (r.get('data') or {}).get('audio'):
             sys.exit(f"ERROR: minimax {br.get('status_code')}: {br.get('status_msg')} (key region? set MINIMAX_API_HOST=api.minimax.io for international keys)")
         open(path, 'wb').write(bytes.fromhex(r['data']['audio']))
@@ -93,7 +110,7 @@ def decode(path, trim=True):
 
 def main():
     a = argparse.ArgumentParser(); a.add_argument('tsv'); a.add_argument('out')
-    a.add_argument('--provider', required=True, choices=list(DEFAULT_VOICE)); a.add_argument('--voice'); a.add_argument('--lang', default='en')
+    a.add_argument('--provider', default='polly', choices=list(DEFAULT_VOICE), help='default polly (Zhiyu neural / Ruth generative)'); a.add_argument('--voice'); a.add_argument('--lang', default='en')
     a.add_argument('--duration', type=float, default=30); a.add_argument('--model', help='polly engine / elevenlabs model_id / openai model')
     a.add_argument('--instructions', help='openai: delivery style, e.g. "friendly product demo, like a colleague showing you"')
     a.add_argument('--speed', type=float, default=1.0); a.add_argument('--lufs', type=float, default=-19); o = a.parse_args()

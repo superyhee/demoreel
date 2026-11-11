@@ -3,7 +3,7 @@
 ## Pick an engine — one command for all of them
 
 ```bash
-python3 scripts/tts.py vo.tsv vo.wav --provider <P> --lang zh|en [--voice V] [--speed 1.0] --duration 30
+python3 scripts/tts.py vo.tsv vo.wav [--provider <P>] --lang zh|en [--voice V] [--speed 1.0] --duration 30   # default provider: polly
 python3 scripts/align_subs.py vo.manifest.json site/subs.json --lang zh --keywords "关键词,…"   # subtitles for ANY engine
 ```
 
@@ -24,7 +24,7 @@ python3 scripts/align_subs.py vo.manifest.json site/subs.json --lang zh --keywor
 - `align_subs.py` (local faster-whisper, `pip install faster-whisper`, model downloads on first run) gives word timing for any
   engine — or for a **human VO recording**: `align_subs.py --tsv vo.tsv --audio vo.wav site/subs.json`. The screen always shows
   your script text; the recognizer only supplies timing. Measured against Polly speech marks: mean error **50 ms**, p90 130 ms.
-- Kokoro/whisper pull PyTorch; a venv keeps it isolated: `python3 -m venv ~/.cache/demoreel-venv && ~/.cache/demoreel-venv/bin/pip install torch kokoro "misaki[zh]" soundfile faster-whisper`.
+- Kokoro/whisper pull PyTorch; a venv keeps it isolated — install BOTH requirement files into it so every script (tts, align_subs, audio_qa) runs with one interpreter: `python3 -m venv ~/.cache/demoreel-venv && ~/.cache/demoreel-venv/bin/pip install -r requirements.txt -r requirements-voice.txt torch`, then `PY=~/.cache/demoreel-venv/bin/python`.
 - Engine prices and model licences change — check the provider's pricing page / model card before publishing.
 
 ---
