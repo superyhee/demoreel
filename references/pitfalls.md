@@ -89,3 +89,38 @@
 - Never slow-zoom/pan a card that holds text (scale 1→1.03 over seconds): text re-rasterises at a new sub-pixel scale each frame and
   visibly jitters. Animate the entrance, then hold perfectly still; keep slow motion for the background (orbs, gradients).
   commercial_qa.py "end card stable" flags sustained sub-pixel drift.
+
+## Where the time goes (measured on a 30 s simulated chat-UI film, two languages)
+Rendering is NOT the bottleneck (900 frames ≈ 45 s per language). The slow parts and their fixes:
+- **Desktop exploration fighting for focus**: the user's terminal / chat app came to front between calls → aborted guarded
+  clicks, a click landing while the window moved, and full-screen shots showing the terminal and once a private chat app.
+  Fix: `explore_act.sh` — window-only capture (`screencapture -l` via `win_info.sh`, matched by PID because the window-server
+  owner name can differ from the process name), coordinates relative to the window shot, frontmost re-verified right before
+  each action, abort instead of clicking blind. Ask the user to keep hands off for ~5 min, or take their screenshots.
+- **Keyboard scrolling does nothing in nested panes** (chat transcripts): use `scroll_mac.sh` (real wheel event at the pane).
+  If a computer-use MCP is installed but not onboarded it fails at the first call — don't count on it.
+- **Cloud TTS rate limits** (MiniMax 1002 RPM after ~10 lines): tts.py backs off, retries and then paces requests; the
+  quota still sets a floor (~50 s for 16 lines), so start VO + subtitle alignment in the background as soon as the script is
+  approved; shorten overrunning lines BEFORE the first run (en lines ≤ ~2.6 words/s).
+- **Whisper model not cached** → a ~75 s connect timeout, then failure. align_subs.py now loads cached models offline first;
+  don't pass `--model base` unless it is cached (`ls ~/.cache/huggingface/hub | grep whisper`).
+- **Two Python environments** (system python lacked faster-whisper, the voice venv lacked scipy) → install both requirement
+  files into one venv and run every script with `$PY`.
+- **Wrong logo found only at the first preview** (the template's placeholder was copied): extract the real one in Phase 1
+  with `app_logo.py`.
+- **Caption covering close-up targets in scrolling UIs**: target near the top of the pane + camera clamped to the window →
+  pad the scroll content (see Phase 4 note) and run `shot_qa.py` right after the first draft, not after the first render.
+- **Mid-task topic switches** (feature A → B → C) cost the most; confirm the feature in checkpoint 0 together with the mode.
+
+## Text shimmer / jitter while the camera moves (user report, measured)
+- Cause: anything that changes the text's on-screen scale or sub-pixel position a little every frame makes Chrome re-rasterize
+  it and snap glyphs to whole pixels, so text steps by ~1 px while boxes move smoothly. Measured on a static chat bubble:
+  slow hold push (scale 1.55→1.60) = 1.6 px x / 1.0 px y wobble; still hold = 0.000 px.
+- Fixes (now defaults): still holds (engine ignores scale/rotation changes between two keyframes on the same targets;
+  `holdPush:true` to opt out); `H.reveal`/`H.popover`/`H.rise` snap the last 0.5 px of ease tails (`H.settle`); keep "lift"
+  effects shadow-only (no slow translate float on text); keep camera targets' layout fixed (no `H.grow` on a held target —
+  the camera keeps re-framing a growing box).
+- Tested and rejected: `text-rendering:geometricPrecision` (no effect), `will-change:transform` on #cam (y wobble 5× lower but
+  text sharpness halves: Laplacian 17.4 → 9.3), 2× DPR + downscale (small gain, 4× pixels, worse on fast moves). Fast moves
+  (~0.5 s) keep ~1–2 px wobble under motion blur — acceptable; keep moves short.
+- Gate: `commercial_qa.py` → `hold still` FAILs on camera drift in a hold or ≥ 0.4 s of sub-pixel text creep.

@@ -14,10 +14,13 @@ Checks (automatic):
   brightness    mean luma of content frames ≥ 30 (dark UIs look darker on video)
   end card      exactly ONE call-to-action visible in the last 3 s; cursor hidden on the end card
   focus aids    at least one callout (notes) or spotlight in a ≥ 20 s film
+  hold still    the camera does not drift during holds and no text creeps sub-pixel for ≥ 0.4 s (text shimmer)
+  logo          no placeholder logo from templates/ (copy the REAL one: scripts/app_logo.py / logo_alpha.py)
+  brand name    the product name on the end card also appears in the VO script (../vo_<lang>.tsv) — catches renamed brands
 Manual (always listed): licensed music, human/natural VO, facts & brand review, 3–5 viewers on a phone.
 Exit code 1 if any FAIL.
 """
-import argparse, os, re, subprocess, sys, io
+import argparse, os, re, subprocess, sys, io, hashlib
 import numpy as np
 from PIL import Image
 from playwright.sync_api import sync_playwright
@@ -100,6 +103,36 @@ def main():
         add('end card stable', worst[0] == 0, 'no sub-pixel text drift in the last 2 s' if worst[0] == 0 else
             f'"{worst[1]}" drifts {worst[0]:.2f} px/frame → text shimmers; hold the card still after its entrance (no slow zoom/pan on text)')
         add('focus aids', D < 20 or C['notes'] > 0 or C['spots'] > 0 or bool(C['sp']), f"{C['notes']} callouts, {C['spots']} spots", warn=True)
+        # hold stillness: camera transform constant inside each hold; text must not creep sub-pixel for long stretches
+        holds = pg.evaluate('(DEMO_CFG.cam||[]).map(k=>[k[0],JSON.stringify(k[1])])'); holds = [(x[0], y[0]) for x, y in zip(holds, holds[1:]) if x[1] == y[1] and y[0] - x[0] > 0.8]
+        drift_cam, creep = [], []
+        for a_, z_ in holds:
+            tfs = set(); streak = best = 0
+            for k in range(int(a_ * 30) + 2, int(z_ * 30) - 1, 3):
+                t = k / 30
+                d = pg.evaluate(f'''(()=>{{const g=()=>{{const o=[];const w=document.createTreeWalker(document.querySelector('#win')||document.querySelector('#stage'),NodeFilter.SHOW_TEXT);let n;
+                  while(n=w.nextNode()){{if(!n.textContent.trim())continue;const r=document.createRange();r.selectNodeContents(n);const b=r.getBoundingClientRect();o.push(b.width?[b.left,b.top]:null)}}return o}};
+                  render({t:.4f});const tf=(document.querySelector('#cam')||{{style:{{}}}}).style.transform;const A=g();render({t + 1/30:.4f});const B=g();let m=0;
+                  A.forEach((x,i)=>{{const y=B[i];if(x&&y){{const dd=Math.max(Math.abs(x[0]-y[0]),Math.abs(x[1]-y[1]));if(dd>0.02&&dd<0.6)m++;}}}});return [tf,m]}})()''')
+                tfs.add(d[0]); streak = streak + 1 if d[1] else 0; best = max(best, streak)
+            if len(tfs) > 1: drift_cam.append(f'{a_:g}–{z_:g}s')
+            if best >= 4: creep.append(f'{a_:g}–{z_:g}s')      # ≥ 4 consecutive samples (every 0.1 s) ≈ 0.4 s of creeping text
+        add('hold still', not drift_cam and not creep, f'{len(holds)} holds still' if not drift_cam and not creep else
+            (f'camera drifts in holds {", ".join(drift_cam)} (holdPush?) ' if drift_cam else '') + (f'text creeps sub-pixel in {", ".join(creep)} → slow float/lift or long ease tail on text; use H.reveal/H.settle, keep lifts shadow-only' if creep else ''))
+        # logo: any <img> whose bytes equal a shipped placeholder (templates/logo_t.png) → FAIL, unless this IS a template page
+        srcs = pg.evaluate("[...document.querySelectorAll('img')].map(i=>decodeURIComponent(new URL(i.src).pathname))")
+        md5 = lambda p: hashlib.md5(open(p, 'rb').read()).hexdigest() if os.path.isfile(p) else None
+        ph = {h for h in (md5(os.path.join(S, '..', 'templates', 'logo_t.png')),) if h}
+        in_tpl = os.path.abspath(o.page).startswith(os.path.abspath(os.path.join(S, '..', 'templates')))
+        bad = sorted({os.path.basename(x) for x in srcs if md5(x) in ph})
+        add('logo', in_tpl or not bad, ('template page (placeholder allowed)' if in_tpl and bad else 'no placeholder logo') if (in_tpl or not bad) else f'{", ".join(bad)} is the template placeholder → use the real logo (scripts/app_logo.py "/Applications/<App>.app" site/ or logo_alpha.py)')
+        # brand name: end-card title vs VO script
+        pg.evaluate(f'render({D - 0.5:.2f})'); pg.wait_for_timeout(60)
+        name = pg.evaluate('''(()=>{for(const q of ['#end .t1','#end h1','#end .name','#brand']){const e=document.querySelector(q);if(e&&e.textContent.trim())return e.textContent.trim()}return ''})()''')
+        vo = os.path.join(os.path.dirname(os.path.abspath(o.page)), '..', f'vo_{o.lang}.tsv')
+        if name and os.path.isfile(vo):
+            txt = open(vo, encoding='utf-8').read(); hit = name.lower() in txt.lower()
+            add('brand name', hit, f'"{name}" appears in the VO' if hit else f'end card says "{name}" but vo_{o.lang}.tsv never does → check the product name (renamed brand? typo?) on screen, in the VO and in the real UI', warn=True)
         b.close()
     w = max(len(r[0]) for r in res)
     for n, s, msg in res: print(f'{s:4}  {n:<{w}}  {msg}')

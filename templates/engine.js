@@ -49,9 +49,51 @@ H.caret=(t,a,b)=>t>a&&t<b&&Math.floor(t*3)%2?'▍':'';
 /** pop-in scale: 0 before start, overshoot to 1 */
 H.pop=(t,a,d=0.35)=>{const k=H.p(t,a,a+d);return k<=0?0:H.back(k);};
 /** fade+slide helper: sets opacity & translateY on el */
-H.rise=(el,t,a,d=0.5,dy=20)=>{const k=H.eo(H.p(t,a,a+d));el.style.opacity=k;el.style.transform=`translateY(${(1-k)*dy}px)`;return k;};
+H.rise=(el,t,a,d=0.5,dy=20)=>{const k=H.eo(H.p(t,a,a+d));el.style.opacity=k;const y=H.settle((1-k)*dy);el.style.transform=y?`translateY(${y}px)`:'none';return k;};
 /** animate an element's height from 0 to natural height (overflow must be hidden) */
 H.grow=(el,k)=>{el.style.display=k<=0?'none':'';if(k<=0)return;el.style.height='auto';const h=el.offsetHeight;el.style.height=(k*h)+'px';el.style.opacity=k;};  // set inner text BEFORE calling
+// ---- UI-agnostic behaviour helpers (layout + look stay yours: rebuild them from screenshots; these only animate) ----
+/** element offsetTop relative to an ancestor (walks offsetParent; give the ancestor position:relative) */
+H.offsetIn=(el,root)=>{let y=0;while(el&&el!==root){y+=el.offsetTop;el=el.offsetParent;}return y;};
+/** reveal WITHOUT changing layout (opacity/transform only) → camera targets measured at keyframe times keep their size.
+ *  o:{d:0.35,dx:0,dy:16,s:0 (start scale delta, e.g. 0.03),ease:H.eo}. Returns k 0..1 */
+// H.settle: snap the last <0.5 px of an ease-out tail to 0 — a slow sub-pixel creep re-rasterizes text every frame (shimmer)
+H.settle=v=>Math.abs(v)<0.5?0:v;
+H.reveal=(el,t,a,o={})=>{if(!el)return 0;const d=o.d??0.35,k=(o.ease||H.eo)(H.p(t,a,a+d));el.style.opacity=k;
+  const dx=H.settle((1-k)*(o.dx||0)),dy=H.settle((1-k)*(o.dy??16)),sc=Math.abs((1-k)*(o.s||0))<0.002?1:1-(1-k)*(o.s||0);
+  el.style.transform=dx||dy||sc!==1?`translate(${dx}px,${dy}px) scale(${sc})`:'none';return k;};
+/** popover / menu / picker: in at `open`, out at `close` (layout stays). o:{d:0.2,dout:0.15,dy:-10,s:0.03}. Returns visibility k */
+H.popover=(el,t,open,close,o={})=>{if(!el)return 0;const k=H.eo(H.p(t,open,open+(o.d??0.2)))*(1-H.p(t,close,close+(o.dout??0.15)));
+  el.style.opacity=k;el.style.visibility=k>0?'':'hidden';const dy=H.settle((1-k)*(o.dy??-10)),sc=Math.abs((1-k)*(o.s??0.03))<0.002?1:1-(1-k)*(o.s??0.03);
+  el.style.transform=dy||sc!==1?`translateY(${dy}px) scale(${sc})`:'none';return k;};
+/** formatted typewriter: segs = 'plain text' | [[text], [text,'b'], [text,'em'], [text,'span class="x"'], ...] → html of the first k share */
+H.typedSeg=(segs,k)=>{if(typeof segs==='string')segs=[[segs]];const tot=segs.reduce((n,s)=>n+[...s[0]].length,0);let n=Math.floor(tot*k+1e-6),out='';
+  for(const s of segs){const c=[...s[0]];const take=c.slice(0,Math.max(0,Math.min(c.length,n))).join('');n-=c.length;
+    if(take)out+=s[1]?`<${s[1]}>${take}</${s[1].split(' ')[0]}>`:take;}return out;};
+/** stream text into el between a..b (AI answers, typed prompts, drafts) with a blinking accent caret.
+ *  o:{caret:true, color:accent, pre:0.1, post:0.3, placeholder:'html shown before a'} */
+H.stream=(el,t,a,b,segs,o={})=>{if(!el)return 0;const k=H.p(t,a,b);
+  if(t<a&&o.placeholder!=null){el.innerHTML=o.placeholder;return 0;}
+  const c=(o.caret!==false)&&t>a-(o.pre??0.1)&&t<b+(o.post??0.3)&&Math.floor(t*3)%2;
+  el.innerHTML=H.typedSeg(segs,k)+(c?`<span style="color:${o.color||(C&&C.accent)||'#7b2ff7'}">▍</span>`:'');return k;};
+/** one step of an agent / job trace: row reveals at t0, spinner while running, check pops at t1.
+ *  el = row; o:{icon:'[data-st]' (slot for spinner/check), meta:'[data-meta]', metaText:'3 files' | n=>`${n} results`, count:8,
+ *  color, ok:'#1d8a4e'}. Returns 'hidden' | 'run' | 'done' */
+H.step=(el,t,t0,t1,o={})=>{if(!el)return 'hidden';H.reveal(el,t,t0,{d:0.3,dx:30,dy:0});
+  const slot=el.querySelector(o.icon||'[data-st]'),meta=el.querySelector(o.meta||'[data-meta]'),done=t>=t1,ac=o.color||(C&&C.accent)||'#7b2ff7';
+  if(slot)slot.innerHTML=done?`<span style="display:inline-flex;color:${o.ok||'#1d8a4e'};transform:scale(${H.back(H.p(t,t1,t1+0.25))})">${H.I('checkc')}</span>`:
+    `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(0,0,0,.12);border-top-color:${ac};transform:rotate(${t*540}deg)"></span>`;
+  if(meta){const mt=o.metaText;let s='';
+    if(o.count!=null&&t>t0+0.2){const n=Math.round(o.count*H.eo(H.p(t,t0+0.3,t1)));s=typeof mt==='function'?mt(n):`${n} ${mt||''}`;}
+    else if(done)s=typeof mt==='function'?mt(o.count??''):(mt||'');
+    meta.textContent=s?'· '+s.trim():'';}
+  return t<t0?'hidden':done?'done':'run';};
+/** scroll a pane by ANCHORS (chat transcripts, feeds, docs): keys=[[tStart,tEnd,anchor],...] in time order; anchor = selector |
+ *  element | number (px) [, pad]. Between beats the scroll eases (eio) from the previous anchor to the next. pad (default 64) keeps the
+ *  anchor below the headline pill in close-ups (≈ captionSafe / camera scale). content needs position:relative. Returns y */
+H.scrollAnchor=(content,t,keys,o={})=>{if(typeof content==='string')content=H.$(content);if(!content)return 0;const pad=o.pad??64;
+  const yOf=(a,pd)=>typeof a==='number'?a:Math.max(0,H.offsetIn(typeof a==='string'?content.querySelector(a)||H.$(a):a,content)-(pd??pad));
+  let y=0;for(const [a,b,an,pd] of keys)y=H.lerp(y,yOf(an,pd),H.eio(H.p(t,a,b)));content.style.transform=`translateY(${-y}px)`;return y;};
 // Lucide-style icons (24x24, stroke). Use H.I('mail') inside template strings.
 H.IC={
 mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
@@ -423,6 +465,11 @@ function render(t){
 }
 function init(cfg){
   C=Object.assign({duration:30,fps:30,view:{cx:960,cy:620,w:1640,h:780},cam:[],cursor:[],clicks:[],captions:[],sfx:[],captionMax:3.2},cfg);
+  // STILL HOLDS (default): two consecutive keyframes on the same targets = a hold → keep the first keyframe's scale/rotation.
+  // A slow push-in during a hold changes the scale every frame → Chrome re-rasterizes text and snaps glyphs to whole pixels →
+  // text visibly shimmers (measured 1.6 px x / 1.0 px y wobble vs 0.000 px when still). holdPush:true restores the old drift.
+  if(!C.holdPush)for(let i=1;i<C.cam.length;i++){const a=C.cam[i-1],b=C.cam[i];
+    if(JSON.stringify(a[1])===JSON.stringify(b[1]))C.cam[i]=[b[0],b[1],a[2],a[3],a[4]].concat(b.slice(5));}
   // COMMERCIAL DEFAULTS (any software): short headline cards, VO subtitles picked up from subs.js (window.SUBS) if present,
   // camera framing rules on '#win' when the page has one, no minimap unless asked for.
   C._caps=C.captions.map(c=>c[3]==='hold'||!C.captionMax?c:[c[0],Math.min(c[1],c[0]+C.captionMax),c[2]]);

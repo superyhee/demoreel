@@ -62,7 +62,12 @@ def main():
     maxw = o.max or (16 if lang in ('zh', 'ja', 'ko') else 30)
     try: from faster_whisper import WhisperModel
     except ImportError: sys.exit('ERROR: pip install faster-whisper (see docs/voiceover.md)')
-    model = WhisperModel(o.model, device='auto', compute_type='int8')
+    try:    # cached model → no network round-trip (a blocked/slow Hugging Face hub otherwise stalls ~75 s, then fails)
+        model = WhisperModel(o.model, device='auto', compute_type='int8', local_files_only=True)
+    except Exception:
+        print(f'whisper model "{o.model}" not cached → downloading from Hugging Face (small ≈ 480 MB)', file=sys.stderr)
+        try: model = WhisperModel(o.model, device='auto', compute_type='int8')
+        except Exception as e: sys.exit(f'ERROR: cannot load whisper model "{o.model}": {e}\n  offline? use a cached model (ls ~/.cache/huggingface/hub | grep whisper) or set HF_ENDPOINT to a mirror')
     items = []
     if o.tsv and o.audio:                                 # one mixed file: align each line inside [start, next start)
         lines = [l.rstrip('\n').split('\t', 1) for l in open(o.tsv, encoding='utf-8') if '\t' in l and l.strip()]

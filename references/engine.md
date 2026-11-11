@@ -17,7 +17,7 @@ Engine injects `#cap` (caption pill), `#topfade`, `#ripple`, `#cursor`, `#spot` 
 |---|---|
 | `duration`, `fps` | default 30 / 30 |
 | `view` | `{cx,cy,w,h}` safe area targets are fitted into. Default `{960,620,1640,780}` (leaves room for caption) |
-| `cam` | `[[t, ['#a','#b'], maxScale, rotX, rotY], ...]` — union rect of selectors is centered & scaled to fit `view`, capped by `maxScale`. Repeat the same selectors at a later t (slightly larger scale) for a slow push during a hold. Interpolation uses quintic ease. rotX/rotY are only applied while entering/exiting (see pitfalls) |
+| `cam` | `[[t, ['#a','#b'], maxScale, rotX, rotY], ...]` — union rect of selectors is centered & scaled to fit `view`, capped by `maxScale`. Repeat the same selectors at a later t = a HOLD: the camera stays perfectly still (engine default; a slow push re-rasterizes text every frame → shimmer; `holdPush:true` restores it). Interpolation uses quintic ease. rotX/rotY are only applied while entering/exiting (see pitfalls) |
 | `camIn`, `camOut` | `[a,b]` window rises from below with 3D tilt + blur / shrinks and blurs out |
 | `cursor` | `[[t, '#sel' or [x,y]], ...]` — eased arc path; targets measured AFTER camera transform, so they land on the zoomed element. Hidden outside first/last key and during camIn/camOut |
 | `clicks` | `[t,...]` ripple + press scale; auto adds `click` SFX |
@@ -41,8 +41,19 @@ After init: `window.render(t)`, `window.SFX`, `window.DURATION`, `window.FPS` (u
 - `H.p(t,a,b)` progress 0..1 · `H.eo` ease-out cubic · `H.eio` in-out cubic · `H.eio5` in-out quintic · `H.back` overshoot · `H.lerp`
 - `H.pop(t,start,dur)` overshoot scale (0 before start) — tags/badges
 - `H.rise(el,t,start,dur,dy)` fade + slide up
-- `H.grow(el,k)` animate height 0→natural (element needs `overflow:hidden`; `display:none` at k=0; update its text BEFORE calling) — expanding rows, AI result boxes
+- `H.grow(el,k)` (changes layout — never on/around a camera target; prefer `H.reveal`) animate height 0→natural (element needs `overflow:hidden`; `display:none` at k=0; update its text BEFORE calling) — expanding rows, AI result boxes
 - `H.typed(str,k)` typewriter substring · `H.caret(t,a,b)` blinking ▍
+- **Behaviour helpers (UI-agnostic — they animate; layout and look stay yours, rebuilt from screenshots):**
+  - `H.reveal(el,t,a,{d,dx,dy,s})` fade/slide/scale in WITHOUT changing layout → camera targets keep their size (use instead of
+    height animation for anything a camera keyframe targets)
+  - `H.popover(el,t,open,close,{dy,s})` menus, pickers, command palettes, @-mention lists (in/out, layout stays)
+  - `H.stream(el,t,a,b,segs,{post,placeholder})` streamed AI answers / typed prompts / drafts with accent caret;
+    `segs` = string or `[[text],[text,'b'],[text,'em']]`; `H.typedSeg(segs,k)` = the raw html
+  - `H.step(row,t,t0,t1,{count,metaText})` agent/job trace row: reveal → spinner → check pop; slots `[data-st]` (icon) and
+    `[data-meta]` (e.g. "· 8 results" counting up)
+  - `H.scrollAnchor(content,t,[[a,b,'#anchor',pad?],…],{pad:64})` scroll a chat/feed/doc pane so each beat's anchor sits
+    below the headline pill (pad ≈ captionSafe / scale); content needs `position:relative`; `H.offsetIn(el,root)`
+  Worked example of all five: a chat-UI film (home composer → steps → streamed table → @agent → email draft).
 - `H.I(name, style?)` inline SVG icon. Names: mail cal msg bell file alert checkc check reply timer pen act lib zap app layers flask db grid flow search spark folder users refresh down right plus ext chart src notes settings upload play plane code. Add more Lucide paths to `H.IC` as needed.
 
 ## Patterns (from the Quick example)
