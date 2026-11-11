@@ -94,6 +94,18 @@ H.step=(el,t,t0,t1,o={})=>{if(!el)return 'hidden';H.reveal(el,t,t0,{d:0.3,dx:30,
 H.scrollAnchor=(content,t,keys,o={})=>{if(typeof content==='string')content=H.$(content);if(!content)return 0;const pad=o.pad??64;
   const yOf=(a,pd)=>typeof a==='number'?a:Math.max(0,H.offsetIn(typeof a==='string'?content.querySelector(a)||H.$(a):a,content)-(pd??pad));
   let y=0;for(const [a,b,an,pd] of keys)y=H.lerp(y,yOf(an,pd),H.eio(H.p(t,a,b)));content.style.transform=`translateY(${-y}px)`;return y;};
+// ---- hook / kinetic-type helpers (any opening style; see references/hooks.md) ----
+/** kinetic type: reveal `html` chunk by chunk. Chunks = split on '|' (author-controlled, works for CJK) or on spaces.
+ *  Chunks may contain <em>/<b>/<br>. o:{stagger:0.12,d:0.35,dy:24,blur:6}. Pure in t (spans are built once per html). */
+H.kinetic=(el,t,a,html,o={})=>{if(!el)return 0;if(el._kin!==html){const parts=html.includes('|')?html.split('|'):html.split(/(?<=\S)\s+(?=\S)/);
+    el.innerHTML=parts.map(p=>p==='<br>'?'<br>':`<span class="kin" style="display:inline-block;white-space:pre">${p}${html.includes('|')?'':' '}</span>`).join('');el._kin=html;}
+  const st=o.stagger??0.12,d=o.d??0.35;let last=0;[...el.querySelectorAll('.kin')].forEach((s,i)=>{const k=H.eo(H.p(t,a+i*st,a+i*st+d));last=k;
+    s.style.opacity=k;const y=H.settle((1-k)*(o.dy??24));s.style.transform=y?`translateY(${y}px)`:'none';s.style.filter=k<1?`blur(${(1-k)*(o.blur??6)}px)`:'none';});return last;};
+/** count a number from→to between a..b (eio); fmt(n) → text, e.g. n=>`${n|0} min`. Counts must come from the story, not invented metrics */
+H.count=(el,t,a,b,from,to,fmt=n=>String(Math.round(n)))=>{if(!el)return 0;const k=H.eio(H.p(t,a,b));el.textContent=fmt(H.lerp(from,to,k));return k;};
+/** strike-through drawn left→right from a (d s); colour defaults to currentColor. Uses a background line → no layout change */
+H.strike=(el,t,a,d=0.3,color='currentColor',w=6)=>{if(!el)return 0;const k=H.eo(H.p(t,a,a+d));el.style.backgroundImage=`linear-gradient(${color},${color})`;
+  el.style.backgroundRepeat='no-repeat';el.style.backgroundPosition='0 55%';el.style.backgroundSize=`${k*100}% ${w}px`;return k;};
 // Lucide-style icons (24x24, stroke). Use H.I('mail') inside template strings.
 H.IC={
 mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',

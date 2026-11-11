@@ -53,11 +53,15 @@ After init: `window.render(t)`, `window.SFX`, `window.DURATION`, `window.FPS` (u
     `[data-meta]` (e.g. "· 8 results" counting up)
   - `H.scrollAnchor(content,t,[[a,b,'#anchor',pad?],…],{pad:64})` scroll a chat/feed/doc pane so each beat's anchor sits
     below the headline pill (pad ≈ captionSafe / scale); content needs `position:relative`; `H.offsetIn(el,root)`
+  - `H.kinetic(el,t,a,'chunk|chunk|<em>chunk</em>',{stagger})` kinetic type (chunks on `|`, or on spaces); `H.count(el,t,a,b,from,to,fmt)`
+    counter; `H.strike(el,t,a,d,color)` strike-through without layout change — building blocks for openings (references/hooks.md)
   Worked example of all five: a chat-UI film (home composer → steps → streamed table → @agent → email draft).
 - `H.I(name, style?)` inline SVG icon. Names: mail cal msg bell file alert checkc check reply timer pen act lib zap app layers flask db grid flow search spark folder users refresh down right plus ext chart src notes settings upload play plane code. Add more Lucide paths to `H.IC` as needed.
 
 ## Patterns (from the Quick example)
-- **Chaos hook**: 12–14 notification cards fly in from edges (stagger 0.11s), random depth z∈[0.8,1.1] with blur for far ones, slow push-in, then all converge to center and shrink into the logo.
+- **Openings**: choose from `references/hooks.md` (text, result-first, split, timer, inside-the-product, persona, chaos, macro).
+  Chaos hook = one option: 12–14 notification cards fly in from edges (stagger 0.11s), random depth z∈[0.8,1.1], slow push-in,
+  then converge into the logo. `templates/demo.html?hook=text|result|split|timer` has four working openings.
 - **Typing AI output**: `H.typed(TEXT, H.p(t,a,b))` + caret; add `tick` SFX every ~0.07s over [a,b].
 - **Expand → act**: chevron click → `H.grow(row)` → highlight "N sources" with a pulse → click "Draft reply" → result box grows + types.
 - **Filter**: type query → chips toggle `.on` → non-matching rows collapse height to 0, matches get highlight + soft shadow.

@@ -12,7 +12,8 @@ All paths below are relative to this skill dir: `~/.claude/skills/demoreel/`.
 ## Checkpoints (one per reply, wait for the user)
 0. **Footage mode (MANDATORY, ask before any exploring/recording)** — real recording vs simulated UI vs hybrid; see "Phase 0".
 1. **Feature understanding + privacy** — after exploring the app, list what the feature does; flag any real data visible.
-2. **Script + storyboard** — table `| # | 时间 | 画面 | 文案/配音 |`; confirm aspect/language/voice.
+2. **Script + storyboard** — table `| # | 时间 | 画面 | 文案/配音 |`; confirm aspect/language/voice AND the opening: offer 2–3 hooks
+   from `references/hooks.md` that fit this feature (ASCII previews), different from the last film of the same product.
 3. **Result** — deliver MP4 path(s), what was verified, honest score + what's still missing.
 Skip waiting only if the user explicitly says to run end-to-end.
 
@@ -69,7 +70,9 @@ Alternatives: record real screen + blur (most content ends up blurred), or inter
 
 ## Phase 3 — Script
 - Before writing, run the 8-point checklist in `references/benchmarks.md` (hook, one storyline, real footage, spotlight, visible results, sound, restraint, one CTA).
-- Narrative that works: **Hook pain (0–3s) → Logo/name (3–5s) → 5–6 feature beats of 3–4s each → End card (last 3–4s)**.
+- Narrative that works: **Hook (0–3s, type chosen from `references/hooks.md` — not always the chaos/pain card) → Logo/name
+  (3–5s, or only on the end card) → 5–6 feature beats of 3–4s each → End card (last 3–4s)**. Record the chosen opening in
+  the project's `demo_notes.md` (`hook: result-first`) so the next film of the same product opens differently.
 - One idea per beat; captions = outcome, not feature list. ~1 visual change every 2–3s.
 - Copy budget (30s): zh ≈ 9 short lines (≤12 字), en ≤ 7 words per line. Feed videos are often muted → captions carry the story.
 - Write VO as `vo_<lang>.tsv` (`start<TAB>text`). Start each line ~0.1–0.3s after its beat begins.
@@ -223,6 +226,7 @@ Keep previous versions (suffix `_v2`) rather than overwriting unless asked to re
 | Viewer's eye wanders; everything equally bright | `spotlight:{}` in Demo.init — dim+blur outside the camera's hold target |
 | Close-ups lose the whole-app context / empty canvas around the app | `camBounds:'#win'` for BOTH modes: wide shots = app 90 % with equal margins, close-ups fill 100 %; no minimap (it adds clutter); keep each shot's target inside one panel group (editor OR chat) so it fits at fill scale |
 | Text shimmers/jitters while the camera "moves" | still holds (engine default), H.reveal/H.settle snap ease tails, shadow-only lifts, fixed layout for held targets — gate: commercial_qa `hold still` |
+| Every film opens the same way | hook library `references/hooks.md`, 2–3 options per storyboard, opening logged in demo_notes.md, `?hook=` variants in the template |
 | Camera cuts every 2–3 s, viewer feels dragged around | one shot per VO beat (5–8 s holds) framing the work area; `spots` move focus inside the hold; fast moves ≤ 15% of runtime |
 | Remaining gap to 9+ | licensed/composed music for public launch; 1–2 real recorded clips from a demo account |
 
