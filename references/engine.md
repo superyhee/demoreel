@@ -1,7 +1,11 @@
 # engine.js API
 
 Load order in the page: strings → `<script src="engine.js">` → your script calling `Demo.init({...})`.
-Stage is 1920×1080. Coordinates for cursor points / view are stage pixels.
+Source: `templates/engine/*.js` (one IIFE split by feature: `02-core.js` = pure camera/beat math, `04-camera.js` = DOM framing,
+`12-spotlight.js`, `14-render.js`, `17-init.js`, …). `templates/engine.js` is GENERATED — edit a module, run
+`python3 scripts/build_engine.py`, then `node --test tests/engine_core.test.js` + `python tests/test_golden_camera.py` (CI checks both
+and that engine.js is up to date). `Demo.core` exposes the pure functions (frameShot, camAt, zoomPath, snapToBeats, …).
+Stage is 1920×1080 by default (other aspects: `size` / `?aspect=` below). Coordinates for cursor points / view are stage pixels.
 
 ## Required DOM
 ```

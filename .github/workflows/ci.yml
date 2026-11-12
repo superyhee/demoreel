@@ -17,6 +17,10 @@ jobs:
           shellcheck -S error scripts/*.sh
       - name: engine.js syntax
         run: node --check templates/engine.js
+      - name: engine.js is built from templates/engine/*.js
+        run: python scripts/build_engine.py --check
+      - name: engine core unit tests (camera framing, zoom path, beat snapping)
+        run: node --test tests/engine_core.test.js
 
   smoke:
     runs-on: ubuntu-latest   # Google Chrome is preinstalled on GitHub's Ubuntu runners (playwright channel='chrome')
