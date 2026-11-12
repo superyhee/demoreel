@@ -11,7 +11,7 @@
 ![Local first](https://img.shields.io/badge/render-100%25%20local-22c55e)
 ![Languages](https://img.shields.io/badge/VO%20%2B%20subtitles-any%20language-f59e0b)
 
-<img src="assets/acme.gif" width="820" alt="DemoReel: 15 s demo of a fictional inbox app, generated from the starter template">
+<img src="assets/acme.gif" width="820" alt="DemoReel: 16.5 s demo of a fictional inbox app, generated from the starter template">
 
 *15 s, generated from `templates/demo.html` — hook → logo → push-in → spotlight → callout → one CTA.*
 
@@ -36,6 +36,9 @@ Screen recordings look amateur. Motion-design tools take days. DemoReel gives yo
 - 🖱️ **Screen-Studio-style cursor** — big, shadowed, tilting on motion, click squash + ripple; on real recordings the real pointer is tracked, erased and replaced.
 - 💬 **Word-timed dynamic subtitles** — for any TTS engine or a human VO (local forced alignment, ~50 ms accuracy), current word highlighted, keywords accented.
 - 🔊 **Sound that is half the film** — voice-over from Azure, ElevenLabs, OpenAI, MiniMax, Polly or local Kokoro, ducked under VO; procedural or library SFX (drop in Kenney CC0 packs, auto-ranked + auditioned); 5 music styles cued to the cut.
+- 📱 **Every cut from one page** — `--aspect 9:16 | 1:1 | 4:5` re-frames the same film for Reels / TikTok / Shorts / LinkedIn: close-ups switch to "target fills the width", headlines and subtitles re-flow, QA runs per aspect.
+- 🥁 **Cut on the beat** — `beat_grid.py` builds the beat grid (exact for the built-in scores, detected for licensed tracks); camera moves and headlines snap to it.
+- 👀 **A taste gate, not just numbers** — `visual_review.py` picks the frames a reviewer looks at and scores 10 criteria (collisions, empty shots, half-drawn states…) — by the agent, or by Claude via the API.
 - ✅ **A commercial-quality gate** — `commercial_qa.py` checks 12 things a reviewer would reject (hook in 3 s, headline restraint, on-screen text ≥ 14 px, brightness, framing, clutter, one CTA, end-card shimmer…) *before* you render.
 
 <div align="center">
@@ -121,7 +124,7 @@ Everything is a pure function of time `t`, so any frame range renders independen
 
 ## Contributing
 
-Issues and PRs welcome — start with a [**good first issue**](https://github.com/superyhee/demoreel/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) (Windows/Linux recording tests, terminal & mobile templates, a before/after showcase). Especially wanted: recorders tested on Linux/Windows/Android, new templates (mobile, terminal, dashboard), multi-aspect (9:16 / 1:1) reframing, and real-world before/after demos.
+Issues and PRs welcome — start with a [**good first issue**](https://github.com/superyhee/demoreel/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) (Windows/Linux recording tests, terminal & mobile templates, a before/after showcase). Especially wanted: recorders tested on Linux/Windows/Android, new templates (mobile, terminal, dashboard), mobile-native templates for 9:16, and real-world before/after demos.
 
 If DemoReel saved you a week of video editing, a ⭐ helps others find it.
 

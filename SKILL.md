@@ -100,7 +100,17 @@ cursor shadow/tilt/squash · no minimap. Opt out per key (e.g. `captionMax:0`, `
 S=~/.claude/skills/demoreel/scripts
 python3 $S/preview_sheet.py site/index.html shots/sheet.png --lang zh 1.8 4.2 7.2 11.5 15.8 19.6 22.4 25.5 28.5
 ```
-Read the sheet; also crop a zoomed frame at full res to check text sharpness. Fix, re-preview. Then:
+Read the sheet; also crop a zoomed frame at full res to check text sharpness. Fix, re-preview.
+**Visual review (taste gate, before rendering):** `python3 $S/visual_review.py site/index.html review/ --lang zh` picks the frames a
+reviewer looks at (hook, each hold, mid-move, callouts, headlines, end card) → Read `review/sheet_*.png`, score `review/rubric.md`
+(10 criteria 0/1/2: hook, focus, legibility, framing, collisions, polish, story, restraint, end card, trust) with frame ids + one fix
+each; apply the top 3 fixes, re-run. Numeric QA can't see collisions, empty establishing shots or half-drawn states — this does.
+`--api` sends the same frames + rubric to Claude (claude-opus-5-5, server-side refusal fallback; `--provider bedrock --region …`) and
+writes review.md/json — costs API credits, ask first; `--dry-run` shows the payload size; `--mp4 out.mp4` reviews the encoded film.
+**Other aspects (social cuts):** the same page renders 9:16 / 1:1 / 4:5 with `--aspect` on every script (`render_parallel.py …
+--aspect 9:16`, `commercial_qa.py --aspect 9:16`, `final_check.py --aspect 9:16`, `preview_sheet.py`, `visual_review.py`). Close-ups
+switch to the 'fit' rule (target fills the width, ≥1.3×); re-lay out hook / logo / end card with `body.ar-9x16 …` CSS (see
+templates/demo.html) and, if a shot doesn't work vertically, override it: `aspects:{'9:16':{cam:[…]}}`. Run QA per aspect. Then:
 ```bash
 python3 $S/render_parallel.py site/index.html video_zh.mp4 --lang zh   # DEFAULT: 6 Chrome workers → ~37 fps (120 s video ≈ 96 s), no PNGs
 python3 $S/render_parallel.py site/index.html video_zh.mp4 --frames-dir frames_zh   # also keep PNGs (flicker_check)
@@ -170,6 +180,10 @@ python3 $S/music_pro.py music.wav --dur 30 --hit 3.55 --groove 5 --main 9 --lift
 python3 $S/music.py music.wav 30 120 5.0 26 3.6                   # older minimal placeholder
 python3 $S/music_styles.py styles/ --all  [same cue args]            # 5 styles, all -12 LUFS: electronic piano lofi cinematic minimal
 python3 $S/music_styles.py music.wav --style piano [cue args]       # one style
+python3 $S/beat_grid.py site/beats.js --bpm 120 --start 5 --dur 30  # cut on the beat: procedural score → exact grid (anchored at 0 s)
+python3 $S/beat_grid.py site/beats.js --wav licensed.wav            # licensed/generated track → tempo + phase detected (±15 ms on 4/4)
+# engine snaps camera-move arrivals + headline starts to beats within 0.15 s; commercial_qa reports 'beat sync' (≥ 60 % on the beat)
+# keep score cues on the grid (multiples of 60/bpm): at 90 BPM --groove 5.0 is half a beat off → 5.33
 $PY $S/audio_qa.py music.wav vo.wav --gain 0.2                  # arc / sub share / speech-band SNR (p5 >= 10 dB)
 ```
 - **Real UI sounds (recommended over synthesis for click/tick/pop/chime)**: Kenney CC0 packs (kenney.nl: Interface Sounds, UI Audio,
