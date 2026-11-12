@@ -6,9 +6,8 @@ set -uo pipefail
 [ $# -ge 3 ] || { sed -n 4p "$0" >&2; exit 2; }
 APP=$1; TS=$2; LABEL=$3; shift 3
 # values are passed as argv (never spliced into AppleScript/Python source) so quotes in names can't inject code
-F=$(osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true')
-W=$(osascript -e 'on run argv' -e 'tell application "System Events" to tell process (item 1 of argv) to get name of front window' -e 'end run' "$APP" 2>/dev/null)
-if [ "$F" != "$APP" ] || [[ "$W" != *"$TS"* ]]; then echo "ABORT: frontmost=$F window=$W"; exit 1; fi
+. "$(dirname "$0")/mac_lib.sh"
+ready "$APP" "$TS" || { echo "ABORT: frontmost=$(front) window=$(win_title "$APP")"; exit 1; }
 T0=${REC_T0_FILE:-/tmp/rec_t0}
 T=$( [ -f "$T0" ] && python3 -c 'import sys,time;print(round(time.time()-float(open(sys.argv[1]).read()),2))' "$T0" || echo NA)
 echo "$T $LABEL" >> "${ACT_LOG:-/tmp/actions.log}"; [ $# -gt 0 ] && cliclick -e 250 "$@"; echo "t=$T ok"
