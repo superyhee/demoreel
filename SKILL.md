@@ -32,19 +32,8 @@ machine be left alone for the recording window? Then route: SIMULATED → Phases
 footage path"; HYBRID → both, decide per storyboard row (add a column `素材: 真实/模拟`).
 
 
-## Software coverage matrix (pick per product; HYBRID mixes rows)
-| Software type | REAL recording | SIMULATED UI | Notes |
-|---|---|---|---|
-| Web app / SaaS | `record_web.py` (scripted Playwright, no desktop capture, repeatable, step-time log) | rebuild from screenshots (`templates/demo.html`) | best case for REAL; needs demo account / logged-in profile |
-| Desktop app — macOS | `record_desktop.sh --window "<App>" "<title>"` + `guarded_act.sh` + `footage_mask.py` | rebuild | user must leave the machine alone; crop the Dock |
-| Desktop app — Linux | `record_desktop.sh` (x11grab / wf-recorder on Wayland), `shot.sh` (import/scrot/grim), clicks via xdotool/ydotool | rebuild | untested on a real Linux box yet — dry-run first |
-| Desktop app — Windows | `record_desktop.sh` (gdigrab, window by title) from Git-Bash; clicks via AutoHotkey/pywinauto | rebuild | untested yet — dry-run first |
-| Electron / IDE (VS Code, Cursor, …) | as desktop; open a demo folder in its OWN window | rebuild (templates/demo.html) | the app's AI really runs → credits + minutes of waiting → speed-ramp |
-| Mobile — iOS | `record_mobile.sh ios` (Simulator) ; physical device via QuickTime | rebuild inside a phone frame | put footage in a phone bezel (footage template `FRAME='phone'`) |
-| Mobile — Android | `record_mobile.sh android` (adb screenrecord ≤180 s / scrcpy) | rebuild inside a phone frame | |
-| CLI / terminal | `record_terminal.sh` (asciinema → agg, real output, crisp text, theme/font control) | engine terminal panel (rebuilt in HTML) | script the commands; add typing pauses |
-| Not-yet-built feature / private data / risky actions | — | SIMULATED only | never record real customer data |
-Long recordings → `footage_edit.py` (cut + speed + crossfades) → `footage_prep.py` (de-flash, step-dissolve) → footage layer.
+## Software coverage matrix
+Which recorder / rebuild path per software type (web, macOS / Linux / Windows desktop, Electron/IDE, iOS, Android, CLI): `references/real-footage.md`.
 
 ## Phase 1 — Explore the real software
 - **Desktop app** (Electron/native), one step per call: `scripts/explore_act.sh "<App>" - shots/s0 none` → Read
@@ -107,6 +96,10 @@ reviewer looks at (hook, each hold, mid-move, callouts, headlines, end card) →
 each; apply the top 3 fixes, re-run. Numeric QA can't see collisions, empty establishing shots or half-drawn states — this does.
 `--api` sends the same frames + rubric to Claude (claude-opus-5-5, server-side refusal fallback; `--provider bedrock --region …`) and
 writes review.md/json — costs API credits, ask first; `--dry-run` shows the payload size; `--mp4 out.mp4` reviews the encoded film.
+Calibrated on the starter template: it catches what numeric QA can't (a hard spotlight blur edge cutting a button, a duplicated
+callout, the cursor covering a label), but totals drift between runs (same 14/20 with different findings) → act on the cited
+frames/evidence and gate only on 0 scores (exit 1), never on the total. Bedrock: `claude-opus-5-5` may only be served in some
+regions (us-east-1 worked; us-west-2 returned 404).
 **Other aspects (social cuts):** the same page renders 9:16 / 1:1 / 4:5 with `--aspect` on every script (`render_parallel.py …
 --aspect 9:16`, `commercial_qa.py --aspect 9:16`, `final_check.py --aspect 9:16`, `preview_sheet.py`, `visual_review.py`). Close-ups
 switch to the 'fit' rule (target fills the width, ≥1.3×); re-lay out hook / logo / end card with `body.ar-9x16 …` CSS (see
@@ -119,94 +112,26 @@ python3 $S/render_frames.py site/index.html frames_zh --lang zh --from 700 --to 
 ```
 
 
-## Real footage path (preferred for dev tools / AI products — credibility)
-1. Record with a DEMO account (never real customer data):
-   - web app: `python3 $S/record_web.py <url|file.html> rec.mp4 --steps steps.json` (scripted, repeatable; writes rec_events.json with step times)
-   - desktop app: `$S/record_desktop.sh rec.mp4 SECONDS --window "<App>" "<title>"` (macOS/Linux/Windows; needs Screen Recording permission on macOS)
-   - mobile: `$S/record_mobile.sh ios|android rec.mp4 SECONDS` · terminal/CLI: `$S/record_terminal.sh rec.mp4 commands.sh`
-   - long session → `$S/footage_edit.py rec.mp4 segments.json edit.mp4 --crop W:H:0:0 --start <t>` (speeds, crossfades at jumps, timing json)
-2. `python3 $S/footage_prep.py edit.mp4 rec/ --fps 30` → image sequence (+ de-flash single-frame repaints, 6-frame dissolve on hard brightness steps) + config snippet.
-3. Measure hotspots ON the prepped footage, then VERIFY: `python3 $S/hotspot_overlay.py rec/ hot.json overlay.png --frames 1,500` — every box must match its panel with equal left/right margins (snap to the printed UI edges). Never convert screenshot coords by hand without this check.
-4. `cp templates/footage-demo.html` → fill FOOT, MAP (project→footage seconds: slope>1 = speed-up with "⏩ ×N" badge, flat = freeze), HOT (hotspots in footage px = camera/spot/cursor targets), SHOTS/SPOTS/CUR.
-5. preview_sheet → render_parallel → mix.sh, exactly as for rebuilt UIs. Worked example: examples/footage-taskflow/ (app + steps) → ~/Downloads/TaskFlow_真实录屏样片_16s.mp4.
-Desktop computer-use recording (learned on a real AI-IDE session):
-- Make a fictional demo project; open it in its OWN window; position it (`osascript … set position/size`); record only that region.
-- Guard EVERY click: `scripts/guarded_act.sh "<App>" "<window-title-substring>" <label> <cliclick args>` refuses to click unless that app+window is frontmost, and logs the recording-relative time (needed for the time map).
-- Other apps WILL come to front (terminal agents, Teams, the same app's other windows) → after recording run `scripts/footage_mask.py rec.mp4 --title-ref <t> --title-box x,y,w,h` to keep only frames whose title bar matches the demo window. Never trust an activity-bar check: two windows of the same app look identical there.
-- Crop the Dock (it overlaps the window bottom), cap each recording (≤20 min) and restart, approve in-app shell commands one at a time ("Allow", never "Always allow") after reading them.
-- If the user's private windows appear, STOP the recording immediately and tell them; offer to delete or filter that file.
-Cursor enhancement (Screen-Studio style, real recordings): `cursor_track.py cut` (1 sample per pointer kind; cut a separate
-light-background I-beam `ibeamL`, give thin templates `thr≈0.04` in tpl.json) → `track` (rec_orig/) → `erase site/rec --backup rec_orig`
-(temporal patch, inpaint fallback) → `cursorTrack:{data, size:46, clicks:[logged t…]}` in Demo.init. The engine keeps rests exact,
-turns every move into one eased glide that ends on arrival, snaps clicks to arrival (ripple + press + click SFX), hides while typing.
-Typing (hybrid): freeze the footage on the frame where the text is complete and reveal it with `typing:[{t0,t1,lines,bg}]` (real
-glyph pixels, uneven cadence, soft ticks). If the pointer rested on that text, repair glyphs by re-rendering the text in the UI font
-inside the erased area only (examples/glyph_fix_example.py; see pitfalls.md).
-Privacy redaction: `redact_text.py rec/ --tpl f01960.jpg:x,y,w,h …` (one crop of the private word per font/size/background) blurs
-every occurrence in all frames; re-scan with a lower threshold to confirm 0 misses. Better: record from a path without the user
-name (e.g. /Users/Shared/<demo>) and a neutral macOS account.
-Commercial polish — works for BOTH modes: `notes:[{t0,t1,sel|box,label,side}]` animated highlight box + label (sel = page elements
-in simulated UIs, box = footage px); `clock:{segs,zero,stopAt,label,done,show}` work clock for simulated agent runs (top level) or
-`footage[i].clock` for recordings; `subtitles` (subtitle_marks.py); headline captions ≤3.2 s; unified cursor look (shadow, tilt, squash).
-Real footage:
-`footage[i].clock:{segs,zero,stopAt}` replaces "⏩×N" with a running real-time work clock ("Agent 工作中 08:26 · 12× 延时" →
-"✓ 完成 13:07"); headline captions ≤3.2 s per beat; excerpt cards with REAL text from the produced artifact (never invented)
-when the footage didn't scroll to it; end card = 3–4 outcome numbers counted up + ONE CTA. Hide the cursor on intro/end cards.
-Notes: headless recordings have NO mouse pointer → add the engine cursor on hotspots at the click times (convert recording times with the MAP). Light UIs need softer spotlight (`dim≈0.3, fadeIn 1.0, fadeOut 0.8`). Mix both paths freely: real footage for the core flow, rebuilt UI for things you can't record.
+## Real footage path (REAL / HYBRID — preferred for dev tools / AI products)
+Read `references/real-footage.md` before recording: demo account only, `record_web.py` / `record_desktop.sh` / `record_mobile.sh` /
+`record_terminal.sh` → `footage_edit.py` → `footage_prep.py` → verify hotspots with `hotspot_overlay.py` → `templates/footage-demo.html`.
+Desktop recording: guard EVERY click with `guarded_act.sh`, filter foreign windows with `footage_mask.py`, and if the user's private
+windows appear STOP the recording and tell them. Cursor enhancement, typing, privacy redaction and commercial polish are in the same file.
 
 ## Phase 6 — Audio
-Any TTS engine (azure / elevenlabs / openai / polly / kokoro local / say) + subtitles for any engine or a human VO — docs/voiceover.md.
-`PY=~/.cache/demoreel-venv/bin/python` = ONE venv with BOTH requirements files (`pip install -r requirements.txt -r requirements-voice.txt`),
-so tts / align_subs / audio_qa all run in it (a voice-only venv lacks scipy → audio_qa fails).
-- **Generate the VO AND align the subtitles right after the script is approved, as ONE background job, while you build the
-  page** (`for L in zh en; do $PY $S/tts.py … && $PY $S/align_subs.py …; done &`) — together ~1 min for two languages and then
-  off the critical path. Cloud TTS speed is bounded by the account's requests-per-minute quota (Polly: 16 lines ≈ 40 s, no RPM issues; MiniMax ≈ 50 s, quota-bound);
-  tts.py retries rate limits itself (HTTP 429 / MiniMax 1002: 20/40/65/65 s backoff) and then paces requests 3.5 s apart
-  (`TTS_MIN_INTERVAL` to preset it). Run languages sequentially, not in parallel. Don't run align_subs concurrently with
-  render_parallel — both are CPU-bound (measured: saves ~5 s of 47 s). Fix every "ends …s, next starts …s" WARN and any last line ending after the duration by
-  shortening the text, then regenerate only that language.
+Read `references/audio.md` (all engines, commands, music styles, Kenney SFX, beat grid, subtitles). The essentials:
+- ONE venv with both requirement files: `PY=~/.cache/demoreel-venv/bin/python` (`pip install -r requirements.txt -r requirements-voice.txt`).
+- Start VO + subtitle alignment as ONE background job right after the script is approved, while you build the page; languages sequentially.
 ```bash
-$PY $S/tts.py vo_zh.tsv vo_zh.wav --lang zh --duration 30   # DEFAULT = Polly (Zhiyu neural; en: Ruth generative) → + vo_zh.manifest.json (−19 LUFS)
-$PY $S/tts.py vo_en.tsv vo_en.wav --lang en --duration 30   # other engines: --provider kokoro|minimax|azure|elevenlabs|openai|say
-$PY $S/align_subs.py vo_zh.manifest.json site/subs_zh.json --lang zh --keywords "…"   # faster-whisper word timing (cached model, offline), script text kept
-# classic Polly-only path:
-$S/tts_polly.sh vo_zh.tsv vo_zh.wav Zhiyu neural cmn-CN 30       # zh (neural)
-$S/tts_polly.sh vo_en.tsv vo_en.wav Ruth generative "" 30         # en (generative; Matthew = male)
-$S/tts_say.sh   vo_zh.tsv vo_zh.wav Tingting 210 30               # offline fallback (robotic)
-python3 $S/sfx.py sfx_zh.json sfx_zh.wav 30                       # sfx json is written by render_frames.py
+$PY $S/tts.py vo_zh.tsv vo_zh.wav --lang zh --duration 30          # default Polly; --provider kokoro|minimax|azure|elevenlabs|openai|say
+$PY $S/align_subs.py vo_zh.manifest.json site/subs_zh.json --lang zh --keywords "…"
+python3 $S/sfx.py sfx_zh.json sfx_zh.wav 30                          # sfx json is written by the renderer
 python3 $S/music_pro.py music.wav --dur 30 --hit 3.55 --groove 5 --main 9 --lift 21 --peak 23 --drop 26 --end 26.6
-# ^ procedural score arranged to the cut: tension ticks+riser → logo impact → light groove → full groove
-#   (sidechain pump) → riser lift → peak w/ bell lead → drop → end chord hit + tail. Mastered loud (~-11 LUFS).
-python3 $S/music.py music.wav 30 120 5.0 26 3.6                   # older minimal placeholder
-python3 $S/music_styles.py styles/ --all  [same cue args]            # 5 styles, all -12 LUFS: electronic piano lofi cinematic minimal
-python3 $S/music_styles.py music.wav --style piano [cue args]       # one style
-python3 $S/beat_grid.py site/beats.js --bpm 120 --start 5 --dur 30  # cut on the beat: procedural score → exact grid (anchored at 0 s)
-python3 $S/beat_grid.py site/beats.js --wav licensed.wav            # licensed/generated track → tempo + phase detected (±15 ms on 4/4)
-# engine snaps camera-move arrivals + headline starts to beats within 0.15 s; commercial_qa reports 'beat sync' (≥ 60 % on the beat)
-# keep score cues on the grid (multiples of 60/bpm): at 90 BPM --groove 5.0 is half a beat off → 5.33
-$PY $S/audio_qa.py music.wav vo.wav --gain 0.2                  # arc / sub share / speech-band SNR (p5 >= 10 dB)
+python3 $S/beat_grid.py site/beats.js --bpm 120 --start 5 --dur 30   # or --wav licensed.wav → cuts land on the beat
+$PY $S/audio_qa.py music.wav vo.wav --gain 0.2
 ```
-- **Real UI sounds (recommended over synthesis for click/tick/pop/chime)**: Kenney CC0 packs (kenney.nl: Interface Sounds, UI Audio,
-  Impact Sounds, Digital Audio, Music Jingles — commercial use, no attribution; keep License.txt). Put them in ~/Downloads/kenney/,
-  `python3 $S/sfx_lib.py index ~/Downloads/kenney lib.json` → `sfx_lib.py audition lib.json 试听/` (let the user pick by ear) →
-  `sfx.py sfx.json sfx.wav DUR --lib lib.json` (level-matched to the synthesized gains, rotated per event; empty pick = synthesized).
-  Default: library click/tick/pop/chime; keep synthesized boom/whoosh/suck/shimmer (library impacts are thin, maximize sweeps sound
-  game-like). Avoid laser/powerUp/zap/phaser/error sounds in product demos. Kenney has NO background music beds (jingles only).
-- Offer the user a choice: mix one preview per style into a folder and let them pick by ear.
-- Map cue points from the video timeline: `hit`=logo, `groove`=UI appears, `main`=first feature beat, `peak`=last 1–2 beats, `end`=end card.
-- Licensed music still beats it for public launches; music_pro is good enough for internal/demo-day/social drafts.
-- Check AWS identity first (`aws sts get-caller-identity`); Polly synthesize-speech creates no resources, cost ≈ cents.
-  Setup for new users (CLI, least-privilege IAM policy, region via POLLY_REGION, voices, troubleshooting): `docs/voiceover.md`.
-- If tts warns a line overruns the next start → **shorten the sentence** (don't speed the voice).
+- A line overruns the next start → **shorten the sentence** (never speed the voice). Check `aws sts get-caller-identity` before Polly.
 - Ask the user for licensed music for anything published; synthesized music is the #1 thing that reads as amateur.
-
-Dynamic subtitles (VO-synced, word-by-word highlight, keyword accent) — after the VO tsv is final:
-```bash
-python3 $S/subtitle_marks.py vo_zh.tsv subs.json --voice Zhiyu --lang cmn-CN   # Polly speech marks → phrases + word times
-```
-Paste into the page: `subtitles:{items:SUBS, keywords:['Spec',…], accent:'#b98bff', size:40}` in Demo.init. Default position is
-fixed at the bottom (user preference); `position:'auto'` moves them under the caption band when the focus target is at the bottom.
-Speed badge sits bottom-left so it never collides with subtitles. Also ship the .srt for platforms with native captions.
 
 ## Phase 7 — Mix, encode, verify
 ```bash
@@ -224,24 +149,8 @@ write `subs_<lang>.srt` next to the json — ship it with the MP4. Verify before
 `max_volume` should be ≤ -1 dB. Say plainly what was and wasn't checked (e.g. "didn't watch/listen end-to-end").
 Keep previous versions (suffix `_v2`) rather than overwriting unless asked to replace.
 
-## Quality bar (what moved the score from 6.5 → ~8.5)
-| Problem in v1 | Fix |
-|---|---|
-| Whole window always visible, 17px text unreadable on mobile | camera push-ins per beat (scale 1.3–1.8), engine `cam` keyframes |
-| Emoji icons | Lucide SVG icons via `H.I()` |
-| Logo and window cross-dissolving (muddy) | sequential: logo zooms+blurs out, THEN window rises with 3D tilt |
-| Empty space / distracting lower content during early beats | collapse hidden rows' height; fade unrelated sections in only when their beat starts |
-| Two text layers cross-fading on tab switch | out (0.2s) then in (0.3s), with ±80px slide |
-| Caption over busy UI | opaque pill + `#topfade` gradient under it |
-| Silent interactions | SFX timeline (clicks, pops, typing ticks, whooshes on camera moves, chime on success) |
-| Thin synthesized music | `music_pro.py` cue-scored arrangement + lookahead ducking (measured speech SNR median 24–30 dB) |
-| Feature list with no story / no ending ask | persona + time-of-day clock, outcome stats from the story, CTA pill (see engine.md "Persuasion & depth") |
-| Flat, single-plane motion | match-cut logo flight, lift-off elements, parallax bg/foreground |
-| Viewer's eye wanders; everything equally bright | `spotlight:{}` in Demo.init — dim+blur outside the camera's hold target |
-| Close-ups lose the whole-app context / empty canvas around the app | `camBounds:'#win'` for BOTH modes: wide shots = app 90 % with equal margins, close-ups fill 100 %; no minimap (it adds clutter); keep each shot's target inside one panel group (editor OR chat) so it fits at fill scale |
-| Text shimmers/jitters while the camera "moves" | still holds (engine default), H.reveal/H.settle snap ease tails, shadow-only lifts, fixed layout for held targets — gate: commercial_qa `hold still` |
-| Every film opens the same way | hook library `references/hooks.md`, 2–3 options per storyboard, opening logged in demo_notes.md, `?hook=` variants in the template |
-| Camera cuts every 2–3 s, viewer feels dragged around | one shot per VO beat (5–8 s holds) framing the work area; `spots` move focus inside the hold; fast moves ≤ 15% of runtime |
-| Remaining gap to 9+ | licensed/composed music for public launch; 1–2 real recorded clips from a demo account |
+## Quality bar
+What separates a 6.5 from an 8.5 film (problem → fix table): `references/quality-bar.md`. Remaining gap to 9+: licensed music,
+1–2 real recorded clips from a demo account.
 
 Pitfalls: see `references/pitfalls.md` (3D blur, zsh word-splitting, Playwright browser, Polly timing…).
