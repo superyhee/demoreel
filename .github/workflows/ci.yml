@@ -35,6 +35,8 @@ jobs:
           python scripts/commercial_qa.py templates/demo.html --lang en --aspect 9:16
       - name: beat detection regression
         run: python tests/test_beat_grid.py
+      - name: golden camera (template framing, all aspects)
+        run: python tests/test_golden_camera.py
       - name: visual review (frame picker + sheets, no API)
         run: python scripts/visual_review.py templates/demo.html out/review --lang en && test -s out/review/sheet_1.png
       - name: render 30 frames + mix

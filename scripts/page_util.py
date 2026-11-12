@@ -23,11 +23,17 @@ def open_page(p, page, lang, wait=800, args=(), aspect=None, dsf=1, **extra):
     pg = b.new_page(viewport={'width': 1920, 'height': 1080}, screen={'width': 1920, 'height': 1080})
     cdp = pg.context.new_cdp_session(pg); _pin(pg, cdp, 1920, 1080, dsf)
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
-    pg.goto(page_url(page, lang, aspect, **extra)); pg.wait_for_timeout(wait)
+    pg.goto(page_url(page, lang, aspect, **extra)); _settle(pg, wait)
     w, h = frame_size(pg)
     if (w, h) != (1920, 1080):   # re-layout at the declared frame size from a clean load (init measures the layout)
-        _pin(pg, cdp, w, h, dsf); errs.clear(); pg.reload(); pg.wait_for_timeout(wait)
+        _pin(pg, cdp, w, h, dsf); errs.clear(); pg.reload(); _settle(pg, wait)
     return b, pg, cdp, errs
+
+_READY = 'Promise.all([document.fonts.ready,...[...document.images].map(i=>i.decode().catch(()=>0))])'
+
+def _settle(pg, wait):
+    # fonts + decoded images before the first capture: a not-yet-decoded logo made early frames nondeterministic
+    pg.evaluate(_READY); pg.wait_for_timeout(wait)
 
 def frame_size(pg):
     w, h = pg.evaluate('window.FRAME||[1920,1080]'); return int(w), int(h)
