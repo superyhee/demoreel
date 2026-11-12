@@ -59,13 +59,18 @@ H.offsetIn=(el,root)=>{let y=0;while(el&&el!==root){y+=el.offsetTop;el=el.offset
  *  o:{d:0.35,dx:0,dy:16,s:0 (start scale delta, e.g. 0.03),ease:H.eo}. Returns k 0..1 */
 // H.settle: snap the last <0.5 px of an ease-out tail to 0 — a slow sub-pixel creep re-rasterizes text every frame (shimmer)
 H.settle=v=>Math.abs(v)<0.5?0:v;
+/** shared transform writer for reveal-style helpers: offset (dx,dy) and scale delta s shrink to 0 as k→1, settled → 'none' */
+H._xf=(el,k,dx,dy,s)=>{dx=H.settle((1-k)*dx);dy=H.settle((1-k)*dy);const sc=Math.abs((1-k)*s)<0.002?1:1-(1-k)*s;
+  el.style.transform=dx||dy||sc!==1?`translate(${dx}px,${dy}px) scale(${sc})`:'none';};
+/** accent colour for helpers: explicit o.color, else the page's DEMO accent */
+H.accent=o=>o.color||(C&&C.accent)||'#7b2ff7';
+/** set innerHTML only when the string changed (per-frame callers would otherwise re-parse + re-layout every frame) */
+H.html=(el,h)=>{if(el._h!==h){el.innerHTML=h;el._h=h;}};
 H.reveal=(el,t,a,o={})=>{if(!el)return 0;const d=o.d??0.35,k=(o.ease||H.eo)(H.p(t,a,a+d));el.style.opacity=k;
-  const dx=H.settle((1-k)*(o.dx||0)),dy=H.settle((1-k)*(o.dy??16)),sc=Math.abs((1-k)*(o.s||0))<0.002?1:1-(1-k)*(o.s||0);
-  el.style.transform=dx||dy||sc!==1?`translate(${dx}px,${dy}px) scale(${sc})`:'none';return k;};
+  H._xf(el,k,o.dx||0,o.dy??16,o.s||0);return k;};
 /** popover / menu / picker: in at `open`, out at `close` (layout stays). o:{d:0.2,dout:0.15,dy:-10,s:0.03}. Returns visibility k */
 H.popover=(el,t,open,close,o={})=>{if(!el)return 0;const k=H.eo(H.p(t,open,open+(o.d??0.2)))*(1-H.p(t,close,close+(o.dout??0.15)));
-  el.style.opacity=k;el.style.visibility=k>0?'':'hidden';const dy=H.settle((1-k)*(o.dy??-10)),sc=Math.abs((1-k)*(o.s??0.03))<0.002?1:1-(1-k)*(o.s??0.03);
-  el.style.transform=dy||sc!==1?`translateY(${dy}px) scale(${sc})`:'none';return k;};
+  el.style.opacity=k;el.style.visibility=k>0?'':'hidden';H._xf(el,k,0,o.dy??-10,o.s??0.03);return k;};
 /** formatted typewriter: segs = 'plain text' | [[text], [text,'b'], [text,'em'], [text,'span class="x"'], ...] → html of the first k share */
 H.typedSeg=(segs,k)=>{if(typeof segs==='string')segs=[[segs]];const tot=segs.reduce((n,s)=>n+[...s[0]].length,0);let n=Math.floor(tot*k+1e-6),out='';
   for(const s of segs){const c=[...s[0]];const take=c.slice(0,Math.max(0,Math.min(c.length,n))).join('');n-=c.length;
@@ -73,16 +78,16 @@ H.typedSeg=(segs,k)=>{if(typeof segs==='string')segs=[[segs]];const tot=segs.red
 /** stream text into el between a..b (AI answers, typed prompts, drafts) with a blinking accent caret.
  *  o:{caret:true, color:accent, pre:0.1, post:0.3, placeholder:'html shown before a'} */
 H.stream=(el,t,a,b,segs,o={})=>{if(!el)return 0;const k=H.p(t,a,b);
-  if(t<a&&o.placeholder!=null){el.innerHTML=o.placeholder;return 0;}
-  const c=(o.caret!==false)&&t>a-(o.pre??0.1)&&t<b+(o.post??0.3)&&Math.floor(t*3)%2;
-  el.innerHTML=H.typedSeg(segs,k)+(c?`<span style="color:${o.color||(C&&C.accent)||'#7b2ff7'}">▍</span>`:'');return k;};
+  if(t<a&&o.placeholder!=null){H.html(el,o.placeholder);return 0;}
+  const c=o.caret!==false&&H.caret(t,a-(o.pre??0.1),b+(o.post??0.3));
+  H.html(el,H.typedSeg(segs,k)+(c?`<span style="color:${H.accent(o)}">${c}</span>`:''));return k;};
 /** one step of an agent / job trace: row reveals at t0, spinner while running, check pops at t1.
  *  el = row; o:{icon:'[data-st]' (slot for spinner/check), meta:'[data-meta]', metaText:'3 files' | n=>`${n} results`, count:8,
  *  color, ok:'#1d8a4e'}. Returns 'hidden' | 'run' | 'done' */
 H.step=(el,t,t0,t1,o={})=>{if(!el)return 'hidden';H.reveal(el,t,t0,{d:0.3,dx:30,dy:0});
-  const slot=el.querySelector(o.icon||'[data-st]'),meta=el.querySelector(o.meta||'[data-meta]'),done=t>=t1,ac=o.color||(C&&C.accent)||'#7b2ff7';
-  if(slot)slot.innerHTML=done?`<span style="display:inline-flex;color:${o.ok||'#1d8a4e'};transform:scale(${H.back(H.p(t,t1,t1+0.25))})">${H.I('checkc')}</span>`:
-    `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(0,0,0,.12);border-top-color:${ac};transform:rotate(${t*540}deg)"></span>`;
+  const slot=el.querySelector(o.icon||'[data-st]'),meta=el.querySelector(o.meta||'[data-meta]'),done=t>=t1,ac=H.accent(o);
+  if(slot)H.html(slot,done?`<span style="display:inline-flex;color:${o.ok||'#1d8a4e'};transform:scale(${H.back(H.p(t,t1,t1+0.25))})">${H.I('checkc')}</span>`:
+    `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(0,0,0,.12);border-top-color:${ac};transform:rotate(${t*540}deg)"></span>`);
   if(meta){const mt=o.metaText;let s='';
     if(o.count!=null&&t>t0+0.2){const n=Math.round(o.count*H.eo(H.p(t,t0+0.3,t1)));s=typeof mt==='function'?mt(n):`${n} ${mt||''}`;}
     else if(done)s=typeof mt==='function'?mt(o.count??''):(mt||'');
@@ -98,9 +103,9 @@ H.scrollAnchor=(content,t,keys,o={})=>{if(typeof content==='string')content=H.$(
 /** kinetic type: reveal `html` chunk by chunk. Chunks = split on '|' (author-controlled, works for CJK) or on spaces.
  *  Chunks may contain <em>/<b>/<br>. o:{stagger:0.12,d:0.35,dy:24,blur:6}. Pure in t (spans are built once per html). */
 H.kinetic=(el,t,a,html,o={})=>{if(!el)return 0;if(el._kin!==html){const parts=html.includes('|')?html.split('|'):html.split(/(?<=\S)\s+(?=\S)/);
-    el.innerHTML=parts.map(p=>p==='<br>'?'<br>':`<span class="kin" style="display:inline-block;white-space:pre">${p}${html.includes('|')?'':' '}</span>`).join('');el._kin=html;}
-  const st=o.stagger??0.12,d=o.d??0.35;let last=0;[...el.querySelectorAll('.kin')].forEach((s,i)=>{const k=H.eo(H.p(t,a+i*st,a+i*st+d));last=k;
-    s.style.opacity=k;const y=H.settle((1-k)*(o.dy??24));s.style.transform=y?`translateY(${y}px)`:'none';s.style.filter=k<1?`blur(${(1-k)*(o.blur??6)}px)`:'none';});return last;};
+    el.innerHTML=parts.map(p=>p==='<br>'?'<br>':`<span class="kin" style="display:inline-block;white-space:pre">${p}${html.includes('|')?'':' '}</span>`).join('');el._kin=html;el._kinS=[...el.querySelectorAll('.kin')];}
+  const st=o.stagger??0.12,d=o.d??0.35;let last=0;el._kinS.forEach((s,i)=>{const k=H.reveal(s,t,a+i*st,{d,dy:o.dy??24});last=k;
+    s.style.filter=k<1?`blur(${(1-k)*(o.blur??6)}px)`:'none';});return last;};
 /** count a number from→to between a..b (eio); fmt(n) → text, e.g. n=>`${n|0} min`. Counts must come from the story, not invented metrics */
 H.count=(el,t,a,b,from,to,fmt=n=>String(Math.round(n)))=>{if(!el)return 0;const k=H.eio(H.p(t,a,b));el.textContent=fmt(H.lerp(from,to,k));return k;};
 /** strike-through drawn left→right from a (d s); colour defaults to currentColor. Uses a background line → no layout change */
@@ -145,7 +150,7 @@ plane:'<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8
 };
 H.I=(n,st)=>`<svg class="i" viewBox="0 0 24 24"${st?` style="${st}"`:''}>${H.IC[n]||''}</svg>`;
 
-let C=null;
+let C=null,SW=1920,SH=1080;   // output frame size (C.size); the authored world inside #cam keeps its own px
 function inject(){
   const st=H.$('#stage');
   const add=(html)=>st.insertAdjacentHTML('beforeend',html);
@@ -157,46 +162,57 @@ function inject(){
   if(!H.$('#cursor'))add('<svg id="cursor" class="abs" viewBox="0 0 24 24"><path d="M4 2l16 9.5-7 1.6 4.2 7.4-2.8 1.5-4.2-7.4L5 19z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>');
 }
 function union(sels){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const s of sels){const e=H.$(s);if(!e)continue;const r=e.getBoundingClientRect();if(!r.width&&!r.height)continue;x0=Math.min(x0,r.left);y0=Math.min(y0,r.top);x1=Math.max(x1,r.right);y1=Math.max(y1,r.bottom);}return [x0,y0,x1,y1];}
-function fillScale(){if(!C.camBounds)return 0;const B=H.$(C.camBounds);if(!B)return 0;const r=B.getBoundingClientRect();return Math.max(1920/r.width,1080/r.height);}
+function fillScale(){if(!C.camBounds)return 0;const B=H.$(C.camBounds);if(!B)return 0;const r=B.getBoundingClientRect();return Math.max(SW/r.width,SH/r.height);}
 function fit(k){const V=C.view;const [x0,y0,x1,y1]=union(k[1]);let s=Math.min(k[2],C.maxZoom||99,V.w/Math.max(1,x1-x0),V.h/Math.max(1,y1-y0));
   let cx=(x0+x1)/2,cy=(y0+y1)/2;
   if(C.camBounds){const B=H.$(C.camBounds),r=B&&B.getBoundingClientRect();
     if(r&&k[1].includes(C.camBounds)){
       // WIDE shot: the app takes ~wideFill (90%) of the screen with EQUAL margins on all sides (centred on the stage)
-      s=(C.wideFill??0.9)*Math.min(1920/r.width,1080/r.height)*(k[2]<1?k[2]:1);cx=(r.left+r.right)/2;cy=(r.top+r.bottom)/2+(V.cy-540)/s;}
+      s=(C.wideFill??0.9)*Math.min(SW/r.width,SH/r.height)*(k[2]<1?k[2]:1);cx=(r.left+r.right)/2;cy=(r.top+r.bottom)/2+(V.cy-SH/2)/s;}
     else if(r&&k[2]>1.05){
-      // CLOSE-UP: fill the screen with the app (no empty canvas) …
-      s=Math.max(s,fillScale()*1.002);
+      // CLOSE-UP, frameRule 'fill' (landscape): fill the screen with the app (no empty canvas) …
+      // frameRule 'fit' (portrait/square): the TARGET fills the view width; the app floats on the designed background
+      if(C.frameRule==='fit'){s=Math.max(C.fitMinZoom??1.3,Math.min(V.w/Math.max(1,x1-x0),V.h/Math.max(1,y1-y0),C.fitMaxZoom??2.2));   // ≥1.3×: UI text stays readable on a phone
+        if((x1-x0)*s>V.w)cx=x0+(V.w/2-24)/s;}   // target wider than the view → keep its START (left edge) in frame, crop the right: UIs read left→right
+      else s=Math.max(s,fillScale()*1.002);
       // … and keep the target out of the caption band (top captionSafe px) and off the bottom edge
       const top=C.captionSafe??140,bot=C.bottomSafe??24;
-      cy=Math.min(cy,y0+(V.cy-top)/s);cy=Math.max(cy,y1-(1080-bot-V.cy)/s);
+      cy=Math.min(cy,y0+(V.cy-top)/s);cy=Math.max(cy,y1-(SH-bot-V.cy)/s);
       const cc=clampHard([cx,cy,s],r);cx=cc[0];cy=cc[1];}}
   return [cx,cy,s,k[3]||0,k[4]||0];}
 // keep the viewport inside the app (r = bounds rect). Hard clamp — no scale-dependent blending (that blending made the
 // centre oscillate when the scale hovered around the fill scale → visible jitter on zoom-outs).
 function clampHard(c,r){const V=C.view,s=c[2];
-  const cx=(r.right-r.left)<=1920/s?(r.left+r.right)/2:Math.min(Math.max(c[0],r.left+V.cx/s),r.right-(1920-V.cx)/s);
-  const cy=(r.bottom-r.top)<=1080/s?(r.top+r.bottom)/2:Math.min(Math.max(c[1],r.top+V.cy/s),r.bottom-(1080-V.cy)/s);
+  const cx=(r.right-r.left)<=SW/s?(r.left+r.right)/2:Math.min(Math.max(c[0],r.left+V.cx/s),r.right-(SW-V.cx)/s);
+  // 'fit' frames let the app float on the background vertically (the caption band wins over filling the frame)
+  const cy=C.frameRule==='fit'?c[1]:(r.bottom-r.top)<=SH/s?(r.top+r.bottom)/2:Math.min(Math.max(c[1],r.top+V.cy/s),r.bottom-(SH-V.cy)/s);
   return [cx,cy,c[2],c[3],c[4]];}
 const isWide=n=>!!(C.camBounds&&C.cam[n]&&C.cam[n][1].includes(C.camBounds));
 // per frame: only BETWEEN two close-ups (holds or close→close moves): keep scale ≥ fill and the viewport inside the app.
 // Close↔wide moves just interpolate between their (already clamped) keyframes → monotonic, no wobble.
 function clampCam(c,t){if(!C.camBounds)return c;const B=H.$(C.camBounds);if(!B)return c;const [i,j]=segOf(t);
-  if(isWide(i)||isWide(j))return c;const r=B.getBoundingClientRect(),fill=Math.max(1920/r.width,1080/r.height);
+  if(isWide(i)||isWide(j))return c;const r=B.getBoundingClientRect(),fill=C.frameRule==='fit'?(C.fitMinZoom??1.3)/1.002:Math.max(SW/r.width,SH/r.height);   // close→close: never zoom out below the close-up floor (no U-shaped zoom = no wobble)
   return clampHard([c[0],c[1],Math.max(c[2],fill*1.002),c[3],c[4]],r);}
 // ---- camera path between two shots: van Wijk & Nuij "smooth and efficient zooming and panning" (same math as
 // d3.interpolateZoom). Near targets → mostly a pan; far targets → a gentle, perceptually constant zoom-out/in.
-// State (fx,fy,s) ↔ (ux,uy,w) with w = 1920/s (visible world width).
+// State (fx,fy,s) ↔ (ux,uy,w) with w = SW/s (visible world width).
 function zoomPath(a,b,rho){
-  const ux0=a[0],uy0=a[1],w0=1920/a[2],ux1=b[0],uy1=b[1],w1=1920/b[2],dx=ux1-ux0,dy=uy1-uy0,d2=dx*dx+dy*dy,r2=rho*rho;
-  if(d2<1e-6){const S=Math.log(w1/w0)/rho;return {S:Math.abs(S),at:k=>[ux0+k*dx,uy0+k*dy,1920/(w0*Math.exp(rho*k*S))]};}
+  const ux0=a[0],uy0=a[1],w0=SW/a[2],ux1=b[0],uy1=b[1],w1=SW/b[2],dx=ux1-ux0,dy=uy1-uy0,d2=dx*dx+dy*dy,r2=rho*rho;
+  if(d2<1e-6){const S=Math.log(w1/w0)/rho;return {S:Math.abs(S),at:k=>[ux0+k*dx,uy0+k*dy,SW/(w0*Math.exp(rho*k*S))]};}
   const d1=Math.sqrt(d2),b0=(w1*w1-w0*w0+r2*r2*d2)/(2*w0*r2*d1),b1=(w1*w1-w0*w0-r2*r2*d2)/(2*w1*r2*d1),
         R0=Math.log(Math.sqrt(b0*b0+1)-b0),R1=Math.log(Math.sqrt(b1*b1+1)-b1),S=(R1-R0)/rho;
   return {S:Math.abs(S),at:k=>{const sk=k*S,c=Math.cosh(R0),u=w0/(r2*d1)*(c*Math.tanh(rho*sk+R0)-Math.sinh(R0));
-    return [ux0+u*dx,uy0+u*dy,1920/(w0*c/Math.cosh(rho*sk+R0))];}};}
+    return [ux0+u*dx,uy0+u*dy,SW/(w0*c/Math.cosh(rho*sk+R0))];}};}
+// keyframe n is measured at its own time — except a hold (same targets as the next keyframe), which is measured at the END
+// of the hold: content that streams / slides in during the hold is framed in its settled layout, and both ends agree.
+const sameT=(a,b)=>JSON.stringify(a[1])===JSON.stringify(b[1]);
+function measureT(n){const K=C.cam;if(C.holdPush)return K[n][0];while(n<K.length-1&&sameT(K[n],K[n+1]))n++;return K[n][0];}
 function segOf(t){const K=C.cam;if(t<=K[0][0])return [0,0];if(t>=K[K.length-1][0])return [K.length-1,K.length-1];let i=0;while(t>K[i+1][0])i++;return [i,i+1];}
 function camAt(t,F){const K=C.cam;const [i,j]=segOf(t);if(i===j)return F[i];
   const raw=H.p(t,K[i][0],K[j][0]);const same=JSON.stringify(K[i][1])===JSON.stringify(K[j][1]);
+  // STILL HOLD: the framing measured at the hold's first keyframe stays for the whole hold, even if the target's layout
+  // changes meanwhile (content streaming in, rows still sliding) — the camera must not drift. holdPush:true = old drift
+  if(same&&!C.holdPush)return F[i];
   if(same||C.camPath==='linear'){const k=same?raw:H.eio(raw);return F[i].map((v,n)=>H.lerp(v,F[j][n],k));}   // holds: linear drift
   const zp=zoomPath(F[i],F[j],C.camRho??1.25);
   // very long jumps read better as a CUT (professional editing) than as a long flight
@@ -214,13 +230,16 @@ function curPos(t){const K=C.cursor;if(!K.length||t<K[0][0]||t>K[K.length-1][0])
 function initTrackDom(){if(!C.cursorTrack||H.$('#tcur'))return;const T=C.cursorTrack;
   H.$('#stage').insertAdjacentHTML('beforeend',`<div id="tring" style="position:absolute;left:0;top:0;z-index:23;pointer-events:none;opacity:0;border-radius:50%;border:3px solid ${T.ringColor||'rgba(185,139,255,.95)'};background:${T.ringFill||'rgba(185,139,255,.18)'}"></div>
   <svg id="tcur" viewBox="0 0 24 24" style="position:absolute;left:0;top:0;z-index:24;pointer-events:none;opacity:0;overflow:visible;transform-origin:17% 8%;filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))"><path d="M4 2l16 9.5-7 1.6 4.2 7.4-2.8 1.5-4.2-7.4L5 19z" fill="${T.color||'#111'}" stroke="${T.stroke||'#fff'}" stroke-width="1.6" stroke-linejoin="round"/></svg>`);}
-function initSubs(){const S=C.subtitles;if(!S||H.$('#subs'))return;const ac=S.accent||'#b98bff';
-  H.$('#stage').insertAdjacentHTML('beforeend',`<div id="subs" style="position:absolute;left:50%;bottom:56px;z-index:22;max-width:1500px;
+function initSubs(){const S=C.subtitles;if(!S||H.$('#subs'))return;const ac=S.accent||'#b98bff',narrow=SW<SH*1.2;
+  // narrow frames (9:16, 1:1): phrases wrap instead of running off the frame
+  H.$('#stage').insertAdjacentHTML('beforeend',`<div id="subs" style="position:absolute;left:50%;bottom:${subBottom()}px;z-index:22;max-width:${narrow?SW-80:Math.min(1500,SW-120)}px;
     padding:12px 26px;border-radius:16px;background:rgba(12,10,18,.74);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
     box-shadow:0 10px 30px rgba(0,0,0,.35);font:600 ${S.size||40}px/1.35 'PingFang SC',-apple-system,sans-serif;color:#fff;
-    text-align:center;white-space:nowrap;opacity:0;letter-spacing:.5px"></div>`);
+    text-align:center;white-space:${narrow?'normal':'nowrap'};opacity:0;letter-spacing:.5px"></div>`);
   const st=document.createElement('style');st.textContent=`#subs .w{transition:none;display:inline-block}#subs .w.f{opacity:.42}#subs .w.k{color:${ac};font-weight:700}
     #subs .w.c{color:#fff;text-shadow:0 0 18px ${ac}cc}#subs .w.k.c{color:${ac};text-shadow:0 0 18px ${ac}}`;document.head.appendChild(st);}
+// bottom margin: 56 px on landscape; on portrait above the ~16 % that Reels / TikTok / Shorts cover with their own UI
+const subBottom=()=>C.subtitles.bottom??(SH>SW?Math.round(SH*0.16):56);
 function subFocusRect(t){   // the rect the viewer is looking at: active spot target, else camera hold target
   const sp=spotAt(t);let sels=sp?sp[0]:null;if(!sels&&C.cam.length){const [i,j]=segOf(t);sels=C.cam[i][1];}
   if(!sels)return null;const [x0,y0,x1,y1]=union(sels);return x1>x0?[x0,y0,x1,y1]:null;}
@@ -236,8 +255,8 @@ function drawSubs(t){const S=C.subtitles;if(!S)return;const el=H.$('#subs');
     const k=n===cur?H.eo(H.p(t,it.words[n].t-0.04,it.words[n].t+0.14)):0;ws[n].style.transform=n===cur?`translateY(${-2*k}px) scale(${1+0.04*k})`:'';}
   const kin=H.eo(H.p(t,it.t0-0.18,it.t0+0.1)),kout=1-H.p(t,it.t1,it.t1+0.22);el.style.opacity=Math.min(kin,kout);
   // position: always the bottom band (default, like broadcast subtitles); position:'auto' dodges a focus target there
-  const fr=S.position==='auto'?subFocusRect(t):null,band=S.band||190,top=!!(fr&&fr[3]>1080-band&&fr[1]>140);
-  const ty=(1-kin)*14;el.style.top=top?(C.captionSafe??140)+'px':'auto';el.style.bottom=top?'auto':'56px';
+  const fr=S.position==='auto'?subFocusRect(t):null,band=S.band||190,top=!!(fr&&fr[3]>SH-band&&fr[1]>140);
+  const ty=(1-kin)*14;el.style.top=top?(C.captionSafe??140)+'px':'auto';el.style.bottom=top?'auto':subBottom()+'px';
   el.style.transform=`translateX(-50%) translateY(${top?-ty:ty}px)`;}
 
 // ---- tracked cursor (real recordings): big, smooth Screen-Studio-style pointer on the REAL pointer path
@@ -278,7 +297,7 @@ function drawTrack(t){const T=C.cursorTrack;if(!T)return;const c=trackCursor(t),
   // macOS hides the pointer while you type → fade it out around typing reveals
   if(C.camOut)c.vis*=1-H.p(t,C.camOut[0],C.camOut[0]+0.35);if(C.camIn)c.vis*=H.p(t,C.camIn[1]-0.2,C.camIn[1]+0.2);   // never on intro/end cards
   for(const Y of C.typing||[])c.vis*=1-H.cl(Math.min(H.p(t,Y.t0-0.25,Y.t0),1-H.p(t,Y.t1+0.1,Y.t1+0.35)));
-  const sz=(T.size||46)*Math.pow(c.z*1920/1920,0.55),cl=(T._clicks||T.clicks||[]).find(x=>t>=x-0.06&&t<x+0.5);
+  const sz=(T.size||46)*Math.pow(c.z,0.55),cl=(T._clicks||T.clicks||[]).find(x=>t>=x-0.06&&t<x+0.5);
   const press=cl!=null?1-H.cl(Math.abs(t-cl-0.03)/0.1):0;
   el.style.opacity=c.vis;el.style.width=sz+'px';el.style.height=sz+'px';
   el.style.transform=`translate(${c.x-sz*0.17}px,${c.y-sz*0.08}px) rotate(${c.tilt*-9}deg) scale(${1-0.16*press})`;
@@ -407,8 +426,8 @@ function drawSpot(t){
   Object.assign(sp.style,{display:'block',left:X+'px',top:Y+'px',width:W+'px',height:Hh+'px',borderRadius:(rad+fe)+'px',
     boxShadow:`0 0 0 4000px rgba(${col},${dim}),inset 0 0 ${fe}px ${fe*0.6}px rgba(${col},${dim})`});
   if(bl<0.3){bands.forEach(b=>b.style.display='none');return;}
-  const m=fe*0.5,ix0=X+m,iy0=Y+m,ix1=X+W-m,iy1=Y+Hh-m,SW=1920,SH=1080;   // blur bands stay outside the clear area
-  [[0,0,SW,iy0],[0,iy1,SW,SH-iy1],[0,iy0,ix0,iy1-iy0],[ix1,iy0,SW-ix1,iy1-iy0]].forEach((q,i)=>{const b=bands[i];
+  const m=fe*0.5,ix0=X+m,iy0=Y+m,ix1=X+W-m,iy1=Y+Hh-m,SWx=SW,SHx=SH;   // blur bands stay outside the clear area
+  [[0,0,SWx,iy0],[0,iy1,SWx,SHx-iy1],[0,iy0,ix0,iy1-iy0],[ix1,iy0,SWx-ix1,iy1-iy0]].forEach((q,i)=>{const b=bands[i];
     Object.assign(b.style,{display:'block',left:q[0]+'px',top:q[1]+'px',width:Math.max(0,q[2])+'px',height:Math.max(0,q[3])+'px',backdropFilter:`blur(${bl.toFixed(2)}px)`,webkitBackdropFilter:`blur(${bl.toFixed(2)}px)`});});
 }
 // ---- minimap ("you are here"): schematic of the whole window + current viewport box
@@ -418,12 +437,12 @@ function drawMinimap(t,c){const M=C.minimap,mm=H.$('#mm');const R=c.MR,W=M.w||30
   const show=c.sc>=(M.minScale||1.12)&&c.wi>=1&&c.wo<=0;mm._k=H.lerp(mm._k||0,show?1:0,0.25);if(t<0.05)mm._k=0;
   // deterministic fade: based on scale distance instead of history
   const k=H.cl((c.sc-(M.minScale||1.12))/0.12)*(c.wi>=1&&c.wo<=0?1:0);
-  const pos=M.pos||[1920-W-32,46];Object.assign(mm.style,{left:pos[0]+'px',top:pos[1]+'px',width:W+'px',height:hh+'px',opacity:k,
+  const pos=M.pos||[SW-W-32,46];Object.assign(mm.style,{left:pos[0]+'px',top:pos[1]+'px',width:W+'px',height:hh+'px',opacity:k,
     background:'rgba(18,16,24,.88)',border:'1px solid rgba(255,255,255,.16)',borderRadius:'10px',boxShadow:'0 12px 30px rgba(0,0,0,.45)',transform:`translateY(${(1-k)*-8}px)`});
   const sx=W/R.win.width,sy=hh/R.win.height;let html='';
   for(const [r,lab] of R.panels){html+=`<div style="position:absolute;left:${(r.left-R.win.left)*sx+2}px;top:${(r.top-R.win.top)*sy+2}px;width:${r.width*sx-4}px;height:${r.height*sy-4}px;background:rgba(255,255,255,.07);border-radius:4px;font-size:11px;color:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap">${lab}</div>`;}
   // viewport (stage) mapped back into window space
-  const inv=(X,Y)=>[(X-c.cx)/c.sc+c.fx,(Y-c.cy)/c.sc+c.fy];const [a0,b0]=inv(0,0),[a1,b1]=inv(1920,1080);
+  const inv=(X,Y)=>[(X-c.cx)/c.sc+c.fx,(Y-c.cy)/c.sc+c.fy];const [a0,b0]=inv(0,0),[a1,b1]=inv(SW,SH);
   const vx0=Math.max(0,(a0-R.win.left)*sx),vy0=Math.max(0,(b0-R.win.top)*sy),vx1=Math.min(W,(a1-R.win.left)*sx),vy1=Math.min(hh,(b1-R.win.top)*sy);
   html+=`<div style="position:absolute;left:${vx0}px;top:${vy0}px;width:${Math.max(6,vx1-vx0)}px;height:${Math.max(6,vy1-vy0)}px;border:2px solid ${col};background:${col}22;border-radius:4px;box-shadow:0 0 12px ${col}88"></div>`;
   if(mm._h!==html){mm.innerHTML=html;mm._h=html;}}
@@ -434,7 +453,7 @@ function render(t){
   let Fseg=null;const camEl=H.$('#cam');
   if(camEl&&C.cam.length&&C.scene){camEl.style.transform='none';camEl.style.filter='none';
     const ks=new Set();for(const x of [t,t-1/C.fps])segOf(x).forEach(n=>ks.add(n));Fseg={};
-    for(const n of ks){C.scene(C.cam[n][0],H);Fseg[n]=fit(C.cam[n]);}}
+    for(const n of ks){C.scene(measureT(n),H);Fseg[n]=fit(C.cam[n]);}}
   C.scene&&C.scene(t,H);
   const cam=H.$('#cam');
   let s=1,wi=1,wo=0;
@@ -475,19 +494,51 @@ function render(t){
   if(C.declutter!==false)declutter();
   return FP.length?Promise.all(FP):undefined;   // Playwright awaits this, so footage frames are decoded before capture
 }
+// ---- output aspect: cfg.size [W,H] or ?aspect=16:9|9:16|1:1|4:5 (URL wins, so one page renders every cut).
+// cfg.aspects:{'9:16':{cam:[…],captions:[…],view:{…},…}} overrides any config key for that aspect only.
+const ASPECTS={'16:9':[1920,1080],'9:16':[1080,1920],'1:1':[1080,1080],'4:5':[1080,1350]};
+function applyAspect(cfg){const q=new URLSearchParams(location.search).get('aspect'),key=q&&ASPECTS[q]?q:null;
+  const size=key?ASPECTS[key]:(cfg.size||[1920,1080]),ar=key||Object.keys(ASPECTS).find(k=>ASPECTS[k][0]*size[1]===ASPECTS[k][1]*size[0])||'custom';
+  cfg=Object.assign({},cfg,(cfg.aspects||{})[ar]||{});[SW,SH]=size;
+  const land=SW>=SH*1.2,view=land?{cx:SW/2,cy:SH*620/1080,w:SW*1640/1920,h:SH*780/1080}:{cx:SW/2,cy:SH*0.5,w:SW*0.92,h:SH*0.6};
+  for(const e of [document.documentElement,document.body,H.$('#stage')])if(e){e.style.width=SW+'px';e.style.height=SH+'px';}
+  document.body.classList.add('ar-'+ar.replace(':','x'));document.body.style.setProperty('--W',SW+'px');document.body.style.setProperty('--H',SH+'px');
+  return Object.assign({size,aspect:ar,view,frameRule:land?'fill':'fit'},cfg);}
+// ---- cut on the music: beats from cfg.beats or window.BEATS (scripts/beat_grid.py → beats.js). Camera-move ARRIVALS and
+// headline starts move to the nearest beat if it is within beatSnap.tol (0.15 s); a move never gets shorter than 0.25 s.
+// beatSnap:false (or beats:false) turns it off. Clicks are NOT moved (the cursor path / footage would no longer match).
+function nearBeat(t){const B=C._beats;let lo=0,hi=B.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(B[m]<=t)lo=m;else hi=m;}
+  return Math.abs(B[lo]-t)<=Math.abs(B[hi]-t)?B[lo]:B[hi];}
+function snapToBeats(){const BT=C.beats===undefined?window.BEATS:C.beats;C._beats=BT&&BT.beats&&BT.beats.length?BT.beats.slice().sort((a,b)=>a-b):null;
+  if(!C._beats||C.beatSnap===false)return;const tol=(C.beatSnap&&C.beatSnap.tol)??0.15,K=C.cam,log=[];
+  for(let i=1;i<K.length;i++){if(sameT(K[i-1],K[i]))continue;const t=K[i][0],b=nearBeat(t);
+    if(Math.abs(b-t)>tol||Math.abs(b-t)<1e-3||b<K[i-1][0]+0.25||(K[i+1]&&b>K[i+1][0]-0.25))continue;
+    K[i]=[b].concat(K[i].slice(1));log.push(['cam',t,b]);}
+  if(!(C.beatSnap&&C.beatSnap.captions===false))C.captions=C.captions.map(c=>{const b=nearBeat(c[0]);
+    if(Math.abs(b-c[0])>tol||Math.abs(b-c[0])<1e-3)return c;log.push(['caption',c[0],b]);return [b,c[1]+b-c[0]].concat(c.slice(2));});
+  C._beatLog=log;}
+/** beat clock: {n: beat index, k: 0..1 phase to the next beat, t0: last beat time, down: on a bar start}; null without beats */
+H.beat=t=>{const B=C&&C._beats;if(!B||t<B[0])return null;let n=0;while(n<B.length-1&&B[n+1]<=t)n++;const t1=B[n+1]??B[n]+(B[n]-(B[n-1]??B[n]-0.5));
+  return {n,k:H.cl((t-B[n])/(t1-B[n])),t0:B[n],down:(window.BEATS&&window.BEATS.down||[]).some(d=>Math.abs(d-B[n])<1e-3)};};
+/** 1 on each beat, easing to 0 over d seconds (scale/glow accents on the music). onlyDown: bar starts only */
+H.pulse=(t,d=0.25,onlyDown=false)=>{const b=H.beat(t);if(!b||(onlyDown&&!b.down))return 0;return 1-H.eo(H.p(t,b.t0,b.t0+d));};
 function init(cfg){
-  C=Object.assign({duration:30,fps:30,view:{cx:960,cy:620,w:1640,h:780},cam:[],cursor:[],clicks:[],captions:[],sfx:[],captionMax:3.2},cfg);
+  C=Object.assign({duration:30,fps:30,cam:[],cursor:[],clicks:[],captions:[],sfx:[],captionMax:3.2},applyAspect(cfg));
   // STILL HOLDS (default): two consecutive keyframes on the same targets = a hold → keep the first keyframe's scale/rotation.
   // A slow push-in during a hold changes the scale every frame → Chrome re-rasterizes text and snaps glyphs to whole pixels →
   // text visibly shimmers (measured 1.6 px x / 1.0 px y wobble vs 0.000 px when still). holdPush:true restores the old drift.
   if(!C.holdPush)for(let i=1;i<C.cam.length;i++){const a=C.cam[i-1],b=C.cam[i];
     if(JSON.stringify(a[1])===JSON.stringify(b[1]))C.cam[i]=[b[0],b[1],a[2],a[3],a[4]].concat(b.slice(5));}
+  snapToBeats();
   // COMMERCIAL DEFAULTS (any software): short headline cards, VO subtitles picked up from subs.js (window.SUBS) if present,
   // camera framing rules on '#win' when the page has one, no minimap unless asked for.
   C._caps=C.captions.map(c=>c[3]==='hold'||!C.captionMax?c:[c[0],Math.min(c[1],c[0]+C.captionMax),c[2]]);
   if(C.subtitles===undefined&&window.SUBS&&window.SUBS.length)C.subtitles={items:window.SUBS,keywords:window.SUBS_KW||[],accent:C.accent||'#b98bff'};
   if(C.camBounds===undefined&&document.querySelector('#win'))C.camBounds='#win';
   inject();
+  // narrow frames: headline cards wrap to 2 lines → measure how low the tallest one reaches instead of the landscape 140 px
+  if(C.captionSafe===undefined&&C.frameRule==='fit'&&C._caps.length){const cap=H.$('#cap');let b=0;
+    for(const c of C._caps){cap.innerHTML=c[2];b=Math.max(b,cap.getBoundingClientRect().bottom);}cap.innerHTML='';C.captionSafe=Math.ceil(b+20);}
   if(C.footage)initFootage();
   initSubs();initTrackDom();initTrack();if(C.notes)initNotes();initClock();if(C.typing&&C.footage)initTyping();
   // auto SFX: clicks + whoosh on every camera move between distinct keyframes
@@ -500,7 +551,7 @@ function init(cfg){
   if(cs&&cs!=='off'){let last=-1e9;for(let i=1;i<C.cam.length;i++){const a=C.cam[i-1],b=C.cam[i];
     if(JSON.stringify(a[1])!==JSON.stringify(b[1])&&b[0]-a[0]<1.6&&a[0]-last>=(cs.minGap??8)){S.push([a[0]+0.05,'whoosh',cs.gain??0.2]);last=a[0];}}}
   window.SFX=S.sort((x,y)=>x[0]-y[0]);window.DURATION=C.duration;window.FPS=C.fps;
-  window.render=render;window.DEMO_CFG=C;window.DEMO_FIT=k=>fit(k);render(0);
+  window.render=render;window.DEMO_CFG=C;window.FRAME=[SW,SH];window.DEMO_FIT=k=>fit(k);render(0);
 }
 window.Demo={init,H};
 if(window.DEMO)init(window.DEMO);

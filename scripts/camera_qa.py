@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Camera-motion QA: samples every frame of the timeline (no rendering to disk) and flags JITTER — the framed app
 reversing direction (position or zoom) during a move, or holds that drift faster than a slow push.
-usage: camera_qa.py <page.html> [--lang zh] [--bounds '#win'] [--fps 30]"""
+usage: camera_qa.py <page.html> [--lang zh] [--aspect 9:16] [--bounds '#win'] [--fps 30]"""
 import argparse, os
 import numpy as np
 from playwright.sync_api import sync_playwright
-a=argparse.ArgumentParser(); a.add_argument('page'); a.add_argument('--lang',default='zh'); a.add_argument('--bounds',default=None); a.add_argument('--fps',type=int,default=30); o=a.parse_args()
+import sys as _s; _s.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from page_util import open_page, ASPECTS
+a=argparse.ArgumentParser(); a.add_argument('page'); a.add_argument('--lang',default='zh'); a.add_argument('--bounds',default=None); a.add_argument('--fps',type=int,default=30); a.add_argument('--aspect',choices=ASPECTS); o=a.parse_args()
 with sync_playwright() as p:
-    b=p.chromium.launch(channel='chrome'); pg=b.new_page(viewport={'width':1920,'height':1080})
-    pg.goto('file://'+os.path.abspath(o.page)+f'?lang={o.lang}'); pg.wait_for_timeout(800)
+    b,pg,_,_=open_page(p,o.page,o.lang,aspect=o.aspect)
     tr=pg.evaluate("""async([bsel,fps])=>{const C=window.DEMO_CFG,B=bsel||C.camBounds||'#win',o=[];const T0=C.camIn?C.camIn[1]:0,T1=C.camOut?C.camOut[0]:C.duration;
       for(let t=T0;t<T1;t+=1/fps){await render(t);const r=document.querySelector(B).getBoundingClientRect();o.push([t,r.left+r.width/2,r.top+r.height/2,r.width]);}return o}""",[o.bounds,o.fps])
     b.close()
