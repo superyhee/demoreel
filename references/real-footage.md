@@ -50,3 +50,14 @@ Real footage:
 "✓ 完成 13:07"); headline captions ≤3.2 s per beat; excerpt cards with REAL text from the produced artifact (never invented)
 when the footage didn't scroll to it; end card = 3–4 outcome numbers counted up + ONE CTA. Hide the cursor on intro/end cards.
 Notes: headless recordings have NO mouse pointer → add the engine cursor on hotspots at the click times (convert recording times with the MAP). Light UIs need softer spotlight (`dim≈0.3, fadeIn 1.0, fadeOut 0.8`). Mix both paths freely: real footage for the core flow, rebuilt UI for things you can't record.
+
+## Lessons from the DemoReel launch film (terminal-heavy HYBRID)
+- `record_terminal.sh COLS ROWS`: pick COLS so the longest output line fits (140+ for QA-style logs) — wrapped lines break
+  mid-word on screen. Then frame close-ups on the LEFT part of the log (hotspot ≈ 60 % of the width, scale ≈ 1.75): the
+  status words (PASS/FAIL, key names) stay ≥ 24 px; line tails may crop.
+- An inset recording (image smaller than its panel) is fine: hotspots are placed in the image's own box.
+- Show the RESULT of every beat on screen: a FAIL → fix → PASS sequence reads far better than a FAIL alone.
+- 9:16 of a wide terminal does not work by reframing: record a separate narrow session (≈ 60 cols) and give the vertical cut
+  its own `aspects:{'9:16':{cam:[…]}}`.
+- Label simulated UI on screen ("simulated demo, fictional data") when real and rebuilt footage share a film.
+

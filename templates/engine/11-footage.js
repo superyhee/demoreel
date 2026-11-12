@@ -17,5 +17,10 @@ function updateFootage(t){const ps=[];let badge=0;
   return ps;}
 function initFootage(){for(const F of C.footage){const el=H.$(F.el);if(!el)continue;const box=el.parentElement;
   if(getComputedStyle(box).position==='static')box.style.position='relative';
-  for(const [id,[x,y,w,h]] of Object.entries(F.hotspots||{}))box.insertAdjacentHTML('beforeend',`<div id="${id.replace('#','')}" style="position:absolute;left:${x/F.w*100}%;top:${y/F.h*100}%;width:${w/F.w*100}%;height:${h/F.h*100}%;visibility:hidden;pointer-events:none"></div>`);}
+  // hotspots live in the IMAGE's footage px: % of the parent only works when the image fills it — otherwise (image inset /
+  // letterboxed inside a larger panel) place them from the image's own offset box, or the camera frames the wrong area
+  const fills=!el.offsetLeft&&!el.offsetTop&&el.offsetWidth===box.clientWidth&&el.offsetHeight===box.clientHeight;
+  const pos=fills?(x,y,w,h)=>`left:${x/F.w*100}%;top:${y/F.h*100}%;width:${w/F.w*100}%;height:${h/F.h*100}%`
+    :(x,y,w,h)=>{const kx=el.offsetWidth/F.w,ky=el.offsetHeight/F.h;return `left:${el.offsetLeft+x*kx}px;top:${el.offsetTop+y*ky}px;width:${w*kx}px;height:${h*ky}px`;};
+  for(const [id,[x,y,w,h]] of Object.entries(F.hotspots||{}))box.insertAdjacentHTML('beforeend',`<div id="${id.replace('#','')}" style="position:absolute;${pos(x,y,w,h)};visibility:hidden;pointer-events:none"></div>`);}
   if(!H.$('#speed'))H.$('#stage').insertAdjacentHTML('beforeend','<div id="speed" style="position:absolute;left:48px;bottom:44px;z-index:22;opacity:0;background:rgba(20,18,28,.88);color:#fff;font:700 34px -apple-system,sans-serif;padding:12px 26px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2)"></div>');}
