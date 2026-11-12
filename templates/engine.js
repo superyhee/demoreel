@@ -421,14 +421,18 @@ function drawSpot(t){
   let [x0,y0,x1,y1]=union(r[0]);
   if(r[3]){const [p0,q0,p1,q1]=union(r[3].from),k=r[3].k;if(p1>p0){x0=H.lerp(p0,x0,k);y0=H.lerp(q0,y0,k);x1=H.lerp(p1,x1,k);y1=H.lerp(q1,y1,k);}}
   x0-=pad;y0-=pad;x1+=pad;y1+=pad;
-  // the inset feather (blur fe + spread .6fe) must end at the pad edge → expand the element by 1.6·fe so no target pixel is dimmed
-  const E=fe*1.6,X=x0-E,Y=y0-E,W=x1-x0+2*E,Hh=y1-y0+2*E;
+  // inset feather (blur fe, spread fe): ≈98 % dim at the element border (no step against the outer dim), fades to 0 at 2·fe
+  // inward → expand the element by 2·fe so no target pixel is dimmed
+  const E=fe*2,X=x0-E,Y=y0-E,W=x1-x0+2*E,Hh=y1-y0+2*E;
   Object.assign(sp.style,{display:'block',left:X+'px',top:Y+'px',width:W+'px',height:Hh+'px',borderRadius:(rad+fe)+'px',
-    boxShadow:`0 0 0 4000px rgba(${col},${dim}),inset 0 0 ${fe}px ${fe*0.6}px rgba(${col},${dim})`});
+    boxShadow:`0 0 0 4000px rgba(${col},${dim}),inset 0 0 ${fe}px ${fe}px rgba(${col},${dim})`});
   if(bl<0.3){bands.forEach(b=>b.style.display='none');return;}
   const m=fe*0.5,ix0=X+m,iy0=Y+m,ix1=X+W-m,iy1=Y+Hh-m,SWx=SW,SHx=SH;   // blur bands stay outside the clear area
-  [[0,0,SWx,iy0],[0,iy1,SWx,SHx-iy1],[0,iy0,ix0,iy1-iy0],[ix1,iy0,SWx-ix1,iy1-iy0]].forEach((q,i)=>{const b=bands[i];
-    Object.assign(b.style,{display:'block',left:q[0]+'px',top:q[1]+'px',width:Math.max(0,q[2])+'px',height:Math.max(0,q[3])+'px',backdropFilter:`blur(${bl.toFixed(2)}px)`,webkitBackdropFilter:`blur(${bl.toFixed(2)}px)`});});
+  // each band fades out towards the clear area (mask) — a hard blur edge cuts visibly through neighbouring UI (buttons, rows)
+  const F=fe,dir=['to bottom','to top','to right','to left'];
+  [[0,0,SWx,iy0],[0,iy1,SWx,SHx-iy1],[0,iy0,ix0,iy1-iy0],[ix1,iy0,SWx-ix1,iy1-iy0]].forEach((q,i)=>{const b=bands[i],mk=`linear-gradient(${dir[i]},#000 calc(100% - ${F}px),transparent)`;
+    Object.assign(b.style,{display:'block',left:q[0]+'px',top:q[1]+'px',width:Math.max(0,q[2])+'px',height:Math.max(0,q[3])+'px',backdropFilter:`blur(${bl.toFixed(2)}px)`,webkitBackdropFilter:`blur(${bl.toFixed(2)}px)`,
+      maskImage:mk,webkitMaskImage:mk});});
 }
 // ---- minimap ("you are here"): schematic of the whole window + current viewport box
 function measureMM(){const M=C.minimap,w=H.$(M.target||'#win').getBoundingClientRect();

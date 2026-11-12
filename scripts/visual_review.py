@@ -6,7 +6,7 @@ camera hold and the middle of every move, callouts, headline cards, end card), a
 
 usage: visual_review.py site/index.html out_dir [--lang zh] [--aspect 9:16] [--max 16]
                         [--mp4 final.mp4]                 # review the encoded film instead of the live page (same frames)
-                        [--api [--provider anthropic|bedrock] [--region us-west-2] [--model claude-opus-5-5]] [--dry-run]
+                        [--api [--provider anthropic|bedrock] [--region us-east-1] [--model claude-opus-5-5]] [--dry-run]
 Writes out_dir/frames/*.jpg, out_dir/sheet_*.png (Read these), out_dir/rubric.md; with --api also review.json + review.md.
 Exit 1 when (--api) any criterion scores 0.
 """
@@ -44,9 +44,10 @@ def pick_times(pg, n_max):
         notes:(C.notes||[]).map(n=>[n.t0,n.t1,n.label||'']),caps:(C._caps||C.captions||[]).map(c=>[c[0],c[1]])}})()''')
     D = C['d']; ts = []
     ts += [(0.8, 'hook'), (1.6, 'hook'), (2.5, 'hook')]
-    if C['ci']: ts.append((C['ci'][1] + 0.25, 'establish'))
-    for a, b, hold in cam_segments(pg):
-        ts.append(((a + b) / 2, 'hold' if hold else 'move'))
+    segs = cam_segments(pg); ci = C['ci'][1] if C['ci'] else 0
+    first = next(((a, b) for a, b, hold in segs if hold and b > ci), None)   # the establishing shot, once it has settled
+    for a, b, hold in segs:   # holds: their settled end state (what the engine frames, see measureT); moves: mid-move
+        ts.append((max(a, ci, b - 0.4), 'establish' if (a, b) == first else 'hold') if hold else ((a + b) / 2, 'move'))
     ts += [(min(a + 0.8, (a + b) / 2), f'callout "{lab[:30]}"') for a, b, lab in C['notes']]
     ts += [(a + 0.6, 'headline') for a, b in C['caps']]
     ts.append((D - 0.8, 'end card'))
@@ -122,11 +123,15 @@ def api_review(files, D, o):
     if o.provider == 'bedrock':
         if not hasattr(anthropic, 'AnthropicBedrockMantle'): sys.exit('bedrock: upgrade the SDK (pip install -U anthropic) for AnthropicBedrockMantle')
         client = anthropic.AnthropicBedrockMantle(aws_region=o.region); req['model'] = 'anthropic.' + o.model
-        resp = client.messages.create(**req, extra_body=extra)            # server-side fallbacks are not available on Bedrock
+        stream = client.messages.stream(**req, extra_body=extra)          # server-side fallbacks are not available on Bedrock
     else:
         client = anthropic.Anthropic()
         extra['fallbacks'] = 'default'                                     # a classifier decline re-runs on the recommended fallback model
-        resp = client.beta.messages.create(**req, betas=['server-side-fallback-2026-07-01'], extra_body=extra)
+        stream = client.beta.messages.stream(**req, betas=['server-side-fallback-2026-07-01'], extra_body=extra)
+    try:
+        with stream as st: resp = st.get_final_message()                   # streamed: long reviews don't hit the request timeout
+    except anthropic.NotFoundError as e:
+        sys.exit(f'{req["model"]} not found ({e.message[:120]}) — on Bedrock the model may only be served in some regions: try --region us-east-1')
     if resp.stop_reason == 'refusal': sys.exit(f'review declined (stop_reason=refusal): {getattr(resp, "stop_details", None)}')
     if resp.stop_reason == 'max_tokens': sys.exit('review truncated (max_tokens) — rerun with fewer frames (--max)')
     text = next(b.text for b in resp.content if b.type == 'text')
@@ -136,7 +141,7 @@ def main():
     a = argparse.ArgumentParser(); a.add_argument('page'); a.add_argument('out'); a.add_argument('--lang', default='zh')
     a.add_argument('--aspect', choices=ASPECTS); a.add_argument('--max', type=int, default=16); a.add_argument('--mp4')
     a.add_argument('--api', action='store_true'); a.add_argument('--provider', choices=['anthropic', 'bedrock'], default='anthropic')
-    a.add_argument('--region', default=os.environ.get('AWS_REGION', 'us-west-2')); a.add_argument('--model', default='claude-opus-5-5')
+    a.add_argument('--region', default=os.environ.get('AWS_REGION', 'us-east-1')); a.add_argument('--model', default='claude-opus-5-5')
     a.add_argument('--dry-run', action='store_true'); o = a.parse_args()
     fd = os.path.join(o.out, 'frames'); os.makedirs(fd, exist_ok=True)
     for f in os.listdir(fd): os.remove(os.path.join(fd, f))
