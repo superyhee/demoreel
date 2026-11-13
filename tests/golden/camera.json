@@ -18,11 +18,11 @@
   ],
   "9.2": [
    "translate(960px, 620px) scale(1.41357) translate(-1060.87px, -644.018px)",
-   "translate(1491.41px, 1194.78px) rotate(0.544501deg) scale(1.1477)"
+   "translate(1492.09px, 1194.85px) rotate(0.463039deg) scale(1.1477)"
   ],
   "11.4": [
    "translate(960px, 620px) scale(1.41379) translate(-1060.98px, -659.5px)",
-   "translate(260.448px, 537.414px) rotate(0deg) scale(1.14778)"
+   "translate(424.055px, 552.032px) rotate(0deg) scale(1.14778)"
   ],
   "13.7": [
    "translate(960px, 620px) scale(1.19874) translate(-1018.68px, -673.743px)",
@@ -52,11 +52,11 @@
   ],
   "9.2": [
    "translate(540px, 960px) scale(1.07557) translate(-540px, -566px)",
-   "translate(1490.44px, 1196.54px) rotate(0.658531deg) scale(1.02699)"
+   "translate(1491.14px, 1196.6px) rotate(0.575459deg) scale(1.02699)"
   ],
   "11.4": [
    "translate(540px, 960px) scale(1.08) translate(-540px, -708px)",
-   "translate(81.32px, 867.28px) rotate(0deg) scale(1.02857)"
+   "translate(256.292px, 882.486px) rotate(0deg) scale(1.02857)"
   ],
   "13.7": [
    "translate(540px, 960px) scale(0.979473) translate(-540px, -835.733px)",
@@ -86,11 +86,11 @@
   ],
   "9.2": [
    "translate(540px, 540px) scale(1.07557) translate(-540px, -566px)",
-   "translate(1490.64px, 1194.92px) rotate(0.634874deg) scale(1.02699)"
+   "translate(1491.37px, 1194.99px) rotate(0.549062deg) scale(1.02699)"
   ],
   "11.4": [
    "translate(540px, 540px) scale(1.08) translate(-540px, -708px)",
-   "translate(81.32px, 447.28px) rotate(0deg) scale(1.02857)"
+   "translate(256.292px, 462.486px) rotate(0deg) scale(1.02857)"
   ],
   "13.7": [
    "translate(540px, 540px) scale(0.881801) translate(-540px, -717.2px)",
@@ -120,11 +120,11 @@
   ],
   "9.2": [
    "translate(540px, 675px) scale(1.07557) translate(-540px, -566px)",
-   "translate(1490.58px, 1195.43px) rotate(0.641876deg) scale(1.02699)"
+   "translate(1491.3px, 1195.5px) rotate(0.556725deg) scale(1.02699)"
   ],
   "11.4": [
    "translate(540px, 675px) scale(1.08) translate(-540px, -708px)",
-   "translate(81.32px, 582.28px) rotate(0deg) scale(1.02857)"
+   "translate(256.292px, 597.486px) rotate(0deg) scale(1.02857)"
   ],
   "13.7": [
    "translate(540px, 675px) scale(0.8809) translate(-540px, -779.3px)",

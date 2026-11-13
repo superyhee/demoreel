@@ -330,10 +330,13 @@ function clampCam(c,t){const r=boundsRect();if(!r)return c;const [i,j]=Core.segO
 const measureT=n=>Core.measureT(C.cam,n,C.holdPush);
 const segOf=t=>Core.segOf(C.cam,t);
 const camAt=(t,F)=>Core.camAt(C.cam,F,t,C,SW);
-// cursor path: eased, slightly arced moves between keyframes ('#sel' = the element's centre, [x,y] = stage px)
-function rectC(sel){const r=H.$(sel).getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2];}
+// cursor path: eased, slightly arced moves between keyframes. Key = [t, '#sel' | [x,y] (stage px), {at:[fx,fy], dx, dy}?]
+// '#sel' aims at the element's centre; at:[0.86,0.72] puts the pointer TIP lower-right inside it, so the arrow body (which
+// hangs down-right from the tip) no longer covers the label / icon being clicked.
+function ptOf(A,o){if(typeof A!=='string')return A;const r=H.$(A).getBoundingClientRect(),at=(o&&o.at)||[0.5,0.5];
+  return [r.left+r.width*at[0]+((o&&o.dx)||0),r.top+r.height*at[1]+((o&&o.dy)||0)];}
 function curPos(t){const K=C.cursor;if(!K.length||t<K[0][0]||t>K[K.length-1][0])return null;
-  for(let i=0;i<K.length-1;i++){const [a,A]=K[i],[b,B]=K[i+1];if(t<=b){const k=H.eio(H.p(t,a,b));const pa=typeof A==='string'?rectC(A):A,pb=typeof B==='string'?rectC(B):B;
+  for(let i=0;i<K.length-1;i++){const [a,A,oa]=K[i],[b,B,ob]=K[i+1];if(t<=b){const k=H.eio(H.p(t,a,b));const pa=ptOf(A,oa),pb=ptOf(B,ob);
     const dx=pb[0]-pa[0],dy=pb[1]-pa[1],n=Math.hypot(dx,dy)||1,arc=Math.sin(k*Math.PI)*Math.min(60,n*0.12);
     return [H.lerp(pa[0],pb[0],k)-dy/n*arc,H.lerp(pa[1],pb[1],k)+dx/n*arc];}}}
 // ---- dynamic subtitles (VO-synced, word highlight, keyword emphasis, auto position away from the focus)

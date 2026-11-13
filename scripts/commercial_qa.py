@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Commercial-quality gate for ANY demo page (simulated UI or real footage). Run before rendering; fix every FAIL.
 
-usage: commercial_qa.py site/index.html [--lang zh] [--aspect 9:16] [--frames 24]
+usage: commercial_qa.py site/index.html [--lang zh] [--aspect 9:16] [--frames 24] [--brief]
 Checks (automatic):
   hook          something readable on screen before 3 s (not a blank/logo-only opening)
   length        ≤ 100 s for one storyline (longer → offer a 60–90 s cut), ≥ 10 s
@@ -83,6 +83,7 @@ def layout_checks(pg, D, add):
 
 def main():
     a = argparse.ArgumentParser(); a.add_argument('page'); a.add_argument('--lang', default='zh'); a.add_argument('--frames', type=int, default=24); a.add_argument('--aspect', choices=ASPECTS)
+    a.add_argument('--brief', action='store_true', help='only FAIL/WARN, one short line each (fits a 60-column terminal / a screen recording)')
     o = a.parse_args(); res = []
     def add(name, ok, msg, warn=False): res.append((name, 'PASS' if ok else ('WARN' if warn else 'FAIL'), msg))
     with sync_playwright() as p:
@@ -203,9 +204,15 @@ def main():
             txt = open(vo, encoding='utf-8').read(); hit = name.lower() in txt.lower()
             add('brand name', hit, f'"{name}" appears in the VO' if hit else f'end card says "{name}" but vo_{o.lang}.tsv never does → check the product name (renamed brand? typo?) on screen, in the VO and in the real UI', warn=True)
         b.close()
-    w = max(len(r[0]) for r in res)
-    for n, s, msg in res: print(f'{s:4}  {n:<{w}}  {msg}')
     sc = sum(r[1] == 'PASS' for r in res)
+    if o.brief:   # the finding only (text before ' → ', ≤ 44 chars): readable at a glance and in a narrow terminal
+        short = lambda m: (lambda x: x if len(x) <= 44 else x[:43].rstrip() + '…')(m.split(' → ')[0].split(' (')[0])
+        for n, s_, msg in res:
+            if s_ != 'PASS': print(f'{s_:4}  {n:<12}  {short(msg)}')
+        print(f'PASS  {sc} checks\nscore {sc}/{len(res)}')
+        sys.exit(1 if any(r[1] == 'FAIL' for r in res) else 0)
+    w = max(len(r[0]) for r in res)
+    for n, s_, msg in res: print(f'{s_:4}  {n:<{w}}  {msg}')
     print(f'\nscore {sc}/{len(res)} automatic checks passed')
     print('MANUAL  licensed music · natural/human VO · facts, numbers & brand review · disclaimer for simulated UI/data · 3–5 viewers on a phone')
     sys.exit(1 if any(r[1] == 'FAIL' for r in res) else 0)

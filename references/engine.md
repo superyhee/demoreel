@@ -23,7 +23,7 @@ Engine injects `#cap` (caption pill), `#topfade`, `#ripple`, `#cursor`, `#spot` 
 | `view` | `{cx,cy,w,h}` safe area targets are fitted into. Default `{960,620,1640,780}` (leaves room for caption) |
 | `cam` | `[[t, ['#a','#b'], maxScale, rotX, rotY], ...]` — union rect of selectors is centered & scaled to fit `view`, capped by `maxScale`. Repeat the same selectors at a later t = a HOLD: the camera stays perfectly still (engine default; a slow push re-rasterizes text every frame → shimmer; `holdPush:true` restores it). Interpolation uses quintic ease. rotX/rotY are only applied while entering/exiting (see pitfalls) |
 | `camIn`, `camOut` | `[a,b]` window rises from below with 3D tilt + blur / shrinks and blurs out |
-| `cursor` | `[[t, '#sel' or [x,y]], ...]` — eased arc path; targets measured AFTER camera transform, so they land on the zoomed element. Hidden outside first/last key and during camIn/camOut |
+| `cursor` | `[[t, '#sel' or [x,y], {at:[fx,fy], dx, dy}?], ...]` — eased arc path; `'#sel'` aims at the centre, `at:[0.86,0.72]` rests the tip lower-right so the arrow never covers the label it clicks; targets measured AFTER camera transform, so they land on the zoomed element. Hidden outside first/last key and during camIn/camOut |
 | `clicks` | `[t,...]` ripple + press scale; auto adds `click` SFX |
 | `captions` | `[[a,b,html], ...]` center-out reveal, fades 0.25s before b. Use `<em>` for gradient accent |
 | `sfx` | extra `[t,type,gain]` events. Auto-added: click per click, whoosh per camera move between different targets (<1.2s apart) |

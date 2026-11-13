@@ -62,6 +62,7 @@ The tool measures (frame-exact times, pixel-exact OCR boxes); the agent chooses 
 Don't ask a model for pixel coordinates (±10–30 px) or timestamps — read the sheet, pick, let the tool measure.
 
 ## Lessons from the DemoReel launch film (terminal-heavy HYBRID)
+- Show the QA itself with `commercial_qa.py … --brief`: only FAIL/WARN, one ≤ 54-char line each (fits a 60-column vertical recording).
 - `record_terminal.sh COLS ROWS`: pick COLS so the longest output line fits (140+ for QA-style logs) — wrapped lines break
   mid-word on screen. Then frame close-ups on the LEFT part of the log (hotspot ≈ 60 % of the width, scale ≈ 1.75): the
   status words (PASS/FAIL, key names) stay ≥ 24 px; line tails may crop.
