@@ -17,121 +17,121 @@
    ""
   ],
   "9.2": [
-   "translate(960px, 620px) scale(1.34003) translate(-1023.6px, -652.676px)",
-   "translate(1491.77px, 1194.75px) rotate(0.500874deg) scale(1.12144)"
+   "translate(960px, 620px) scale(1.41357) translate(-1060.87px, -644.018px)",
+   "translate(1491.41px, 1194.78px) rotate(0.544501deg) scale(1.1477)"
   ],
   "11.4": [
-   "translate(960px, 620px) scale(1.27313) translate(-985.953px, -676.989px)",
-   "translate(425.165px, 523.166px) rotate(0deg) scale(1.09755)"
+   "translate(960px, 620px) scale(1.41379) translate(-1060.98px, -659.5px)",
+   "translate(260.448px, 537.414px) rotate(0deg) scale(1.14778)"
   ],
   "13.7": [
-   "translate(960px, 620px) scale(1.13893) translate(-974.414px, -684.331px)",
-   "translate(1696px, 1248px) rotate(0deg) scale(1.04962)"
+   "translate(960px, 620px) scale(1.19874) translate(-1018.68px, -673.743px)",
+   "translate(1696px, 1248px) rotate(0deg) scale(1.07098)"
   ],
   "14.6": [
    "translate(960px, 560px) rotateX(16deg) rotateY(0deg) scale(0.835643) translate(-960px, -693.502px)",
-   "translate(1696px, 1248px) rotate(0deg) scale(1.04962)"
+   "translate(1696px, 1248px) rotate(0deg) scale(1.07098)"
   ]
  },
  "9:16": {
   "4.3": [
-   "translate(540px, 1012.5px) rotateX(3.5deg) rotateY(0deg) scale(0.623077) translate(-960px, -615px)",
+   "translate(540px, 1012.5px) rotateX(3.5deg) rotateY(0deg) scale(0.972) translate(-540px, -990px)",
    ""
   ],
   "5.5": [
-   "translate(540px, 960px) scale(0.623077) translate(-960px, -615px)",
+   "translate(540px, 960px) scale(0.972) translate(-540px, -990px)",
    ""
   ],
   "6.8": [
-   "translate(540px, 960px) scale(0.894799) translate(-921.936px, -501.432px)",
+   "translate(540px, 960px) scale(1.00982) translate(-540px, -692.105px)",
    ""
   ],
   "8.1": [
-   "translate(540px, 960px) scale(1.3) translate(-903.692px, -447px)",
+   "translate(540px, 960px) scale(1.08) translate(-540px, -424px)",
    ""
   ],
   "9.2": [
-   "translate(540px, 960px) scale(1.3) translate(-903.692px, -553.25px)",
-   "translate(1490.51px, 1196.55px) rotate(0.650098deg) scale(1.10714)"
+   "translate(540px, 960px) scale(1.07557) translate(-540px, -566px)",
+   "translate(1490.44px, 1196.54px) rotate(0.658531deg) scale(1.02699)"
   ],
   "11.4": [
-   "translate(540px, 960px) scale(1.3) translate(-903.692px, -659.5px)",
-   "translate(100.9px, 883.9px) rotate(0deg) scale(1.10714)"
+   "translate(540px, 960px) scale(1.08) translate(-540px, -708px)",
+   "translate(81.32px, 867.28px) rotate(0deg) scale(1.02857)"
   ],
   "13.7": [
-   "translate(540px, 960px) scale(0.862514) translate(-920.923px, -645.882px)",
+   "translate(540px, 960px) scale(0.979473) translate(-540px, -835.733px)",
    "translate(1696px, 1248px) rotate(0deg) scale(1)"
   ],
   "14.6": [
-   "translate(540px, 900px) rotateX(16deg) rotateY(0deg) scale(0.470049) translate(-960px, -615px)",
+   "translate(540px, 900px) rotateX(16deg) rotateY(0deg) scale(0.733277) translate(-540px, -990px)",
    "translate(1696px, 1248px) rotate(0deg) scale(1)"
   ]
  },
  "1:1": {
   "4.3": [
-   "translate(540px, 592.5px) rotateX(3.5deg) rotateY(0deg) scale(0.623077) translate(-960px, -615px)",
+   "translate(540px, 592.5px) rotateX(3.5deg) rotateY(0deg) scale(0.782609) translate(-540px, -731px)",
    ""
   ],
   "5.5": [
-   "translate(540px, 540px) scale(0.623077) translate(-960px, -615px)",
+   "translate(540px, 540px) scale(0.782609) translate(-540px, -731px)",
    ""
   ],
   "6.8": [
-   "translate(540px, 540px) scale(0.894799) translate(-921.936px, -501.432px)",
+   "translate(540px, 540px) scale(0.91624) translate(-540px, -552.992px)",
    ""
   ],
   "8.1": [
-   "translate(540px, 540px) scale(1.3) translate(-903.692px, -447px)",
+   "translate(540px, 540px) scale(1.08) translate(-540px, -424px)",
    ""
   ],
   "9.2": [
-   "translate(540px, 540px) scale(1.3) translate(-903.692px, -553.25px)",
-   "translate(1490.72px, 1194.92px) rotate(0.626185deg) scale(1.10714)"
+   "translate(540px, 540px) scale(1.07557) translate(-540px, -566px)",
+   "translate(1490.64px, 1194.92px) rotate(0.634874deg) scale(1.02699)"
   ],
   "11.4": [
-   "translate(540px, 540px) scale(1.3) translate(-903.692px, -659.5px)",
-   "translate(100.9px, 463.9px) rotate(0deg) scale(1.10714)"
+   "translate(540px, 540px) scale(1.08) translate(-540px, -708px)",
+   "translate(81.32px, 447.28px) rotate(0deg) scale(1.02857)"
   ],
   "13.7": [
-   "translate(540px, 540px) scale(0.862514) translate(-920.923px, -645.882px)",
+   "translate(540px, 540px) scale(0.881801) translate(-540px, -717.2px)",
    "translate(1696px, 1248px) rotate(0deg) scale(1)"
   ],
   "14.6": [
-   "translate(540px, 480px) rotateX(16deg) rotateY(0deg) scale(0.470049) translate(-960px, -615px)",
+   "translate(540px, 480px) rotateX(16deg) rotateY(0deg) scale(0.5904) translate(-540px, -731px)",
    "translate(1696px, 1248px) rotate(0deg) scale(1)"
   ]
  },
  "4:5": {
   "4.3": [
-   "translate(540px, 727.5px) rotateX(3.5deg) rotateY(0deg) scale(0.623077) translate(-960px, -615px)",
+   "translate(540px, 727.5px) rotateX(3.5deg) rotateY(0deg) scale(0.782609) translate(-540px, -886.25px)",
    ""
   ],
   "5.5": [
-   "translate(540px, 675px) scale(0.623077) translate(-960px, -615px)",
+   "translate(540px, 675px) scale(0.782609) translate(-540px, -886.25px)",
    ""
   ],
   "6.8": [
-   "translate(540px, 675px) scale(0.894799) translate(-921.936px, -501.432px)",
+   "translate(540px, 675px) scale(0.912336) translate(-540px, -618.223px)",
    ""
   ],
   "8.1": [
-   "translate(540px, 675px) scale(1.3) translate(-903.692px, -447px)",
+   "translate(540px, 675px) scale(1.08) translate(-540px, -424px)",
    ""
   ],
   "9.2": [
-   "translate(540px, 675px) scale(1.3) translate(-903.692px, -553.25px)",
-   "translate(1490.66px, 1195.44px) rotate(0.633252deg) scale(1.10714)"
+   "translate(540px, 675px) scale(1.07557) translate(-540px, -566px)",
+   "translate(1490.58px, 1195.43px) rotate(0.641876deg) scale(1.02699)"
   ],
   "11.4": [
-   "translate(540px, 675px) scale(1.3) translate(-903.692px, -659.5px)",
-   "translate(100.9px, 598.9px) rotate(0deg) scale(1.10714)"
+   "translate(540px, 675px) scale(1.08) translate(-540px, -708px)",
+   "translate(81.32px, 582.28px) rotate(0deg) scale(1.02857)"
   ],
   "13.7": [
-   "translate(540px, 675px) scale(0.862514) translate(-920.923px, -645.882px)",
+   "translate(540px, 675px) scale(0.8809) translate(-540px, -779.3px)",
    "translate(1696px, 1248px) rotate(0deg) scale(1)"
   ],
   "14.6": [
-   "translate(540px, 615px) rotateX(16deg) rotateY(0deg) scale(0.470049) translate(-960px, -615px)",
+   "translate(540px, 615px) rotateX(16deg) rotateY(0deg) scale(0.5904) translate(-540px, -886.25px)",
    "translate(1696px, 1248px) rotate(0deg) scale(1)"
   ]
  }

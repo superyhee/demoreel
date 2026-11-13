@@ -443,8 +443,10 @@ function drawNotes(t){(C.notes||[]).forEach((N,i)=>{const b=H.$("#dnB"+i),l=H.$(
   if(N.sel){const rs=[].concat(N.sel).map(q=>H.$(q)).filter(Boolean).map(e=>e.getBoundingClientRect()).filter(r=>r.width>0);if(!rs.length){b.style.opacity=0;l.style.opacity=0;return;}
     const x0=Math.min(...rs.map(r=>r.left)),y0=Math.min(...rs.map(r=>r.top)),x1=Math.max(...rs.map(r=>r.right)),y1=Math.max(...rs.map(r=>r.bottom));X=x0-P;Y=y0-P;W=x1-x0+2*P;Hh=y1-y0+2*P;}
   else{const F=C.footage[N.footage||0],r=H.$(F.el).getBoundingClientRect(),z=r.width/F.w,[x,y,w,h]=N.box;X=r.left+x*z-P;Y=r.top+y*z-P;W=w*z+2*P;Hh=h*z+2*P;}
-  b.style.opacity=vis;b.style.left=X+'px';b.style.top=Y+'px';b.style.width=W+'px';b.style.height=Hh+'px';
-  b.style.clipPath=`inset(-12px ${(1-k)*100}% -12px -12px)`;            // draws on left → right
+  b.style.left=X+'px';b.style.top=Y+'px';b.style.width=W+'px';b.style.height=Hh+'px';
+  // default: the whole box fades + settles in (a still caught mid-way never shows a half-drawn border); draw:'wipe' = old left→right draw-on
+  if(N.draw==='wipe'){b.style.opacity=vis;b.style.clipPath=`inset(-12px ${(1-k)*100}% -12px -12px)`;}
+  else{b.style.opacity=vis*k;b.style.transform=k<1?`scale(${1.04-0.04*k})`:'none';}
   const kl=H.eo(H.p(t,N.t0+0.25,N.t0+0.6)),lw=l.offsetWidth,lh=l.offsetHeight,sd=N.side||'top';
   const lx=sd==='left'?X-lw-14:sd==='right'?X+W+14:X,ly=sd==='top'?Y-lh-12:sd==='bottom'?Y+Hh+12:Y+Hh/2-lh/2;
   l.style.opacity=vis*kl;l.style.transform=`translate(${lx}px,${ly+(1-kl)*10}px) scale(${0.9+0.1*kl})`;});}
