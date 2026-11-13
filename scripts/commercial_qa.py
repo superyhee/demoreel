@@ -18,6 +18,9 @@ Checks (automatic):
   logo          no placeholder logo from templates/ (copy the REAL one: scripts/app_logo.py / logo_alpha.py)
   establish     the first camera shot after camIn is a WIDE hold ≥ 1.2 s (orient the viewer before the first push-in)
   beat sync     camera-move arrivals + headline starts land within 60 ms of a beat (beats.js from beat_grid.py), ≥ 60 %
+  callouts in frame   every visible callout box stays inside the frame
+  headline clear      the headline pill never covers the camera's hold target (FAIL); subtitles clear: same for subtitles (WARN)
+  headline wrap       no headline wraps into a lone short last line (WARN)
   brand name    the product name on the end card also appears in the VO script (../vo_<lang>.tsv) — catches renamed brands
 Manual (always listed): licensed music, human/natural VO, facts & brand review, 3–5 viewers on a phone.
 Exit code 1 if any FAIL.
@@ -35,6 +38,48 @@ CTA_RE = r'(下载|免费|试用|立即|开始使用|打开|预约|联系|\bGet 
 
 def run(cmd):
     r = subprocess.run(cmd, capture_output=True, text=True); return r.stdout + r.stderr
+
+# Per-frame layout geometry, sampled every 0.1 s in ONE round trip. "target" = the camera's hold target (not wide shots).
+LAYOUT_JS = '''(ts)=>{const C=DEMO_CFG,K=C.cam,B=C.camBounds,W=innerWidth,Hh=innerHeight;
+  const vis=e=>{if(!e)return 0;let x=e,op=1;while(x&&x!==document.body){const s=getComputedStyle(x);if(s.display==='none')return 0;op*=+s.opacity;x=x.parentElement;}return op;};
+  const R=e=>{const r=e.getBoundingClientRect();return [r.left,r.top,r.right,r.bottom];};
+  const inter=(a,b)=>[Math.max(0,Math.min(a[2],b[2])-Math.max(a[0],b[0])),Math.max(0,Math.min(a[3],b[3])-Math.max(a[1],b[1]))];
+  const target=t=>{for(let i=0;i<K.length-1;i++)if(t>=K[i][0]&&t<K[i+1][0]){if(JSON.stringify(K[i][1])!==JSON.stringify(K[i+1][1])||(B&&K[i][1].includes(B)))return null;
+      let u=null;for(const s of K[i][1]){const e=document.querySelector(s);if(!e)continue;const r=R(e);if(r[2]-r[0]<2)continue;u=u?[Math.min(u[0],r[0]),Math.min(u[1],r[1]),Math.max(u[2],r[2]),Math.max(u[3],r[3])]:r;}return u;}return null;};
+  const lines=e=>{const rg=document.createRange();rg.selectNodeContents(e);const by={};for(const r of rg.getClientRects()){if(r.width<1)continue;const k=Math.round(r.top/8);
+      by[k]=by[k]?[Math.min(by[k][0],r.left),Math.max(by[k][1],r.right)]:[r.left,r.right];}return Object.keys(by).sort((a,b)=>a-b).map(k=>by[k][1]-by[k][0]);};
+  return ts.map(t=>{render(t);const o={t,off:[],cap:0,subs:0,orphan:null};const tg=target(t);
+    document.querySelectorAll('[id^="dnB"]').forEach(e=>{if(vis(e)<0.5)return;const r=R(e),d=Math.max(-r[0],-r[1],r[2]-W,r[3]-Hh);if(d>6)o.off.push(Math.round(d));});
+    const cap=document.querySelector('#cap');if(cap&&vis(cap)>0.5&&cap.textContent.trim()){if(tg){const i=inter(R(cap),tg);if(i[0]>8&&i[1]>8)o.cap=Math.round(i[1]);}
+      const L=lines(cap);if(L.length>1&&L[L.length-1]<0.3*Math.max(...L))o.orphan=cap.textContent.trim();}
+    const sb=document.querySelector('#subs');if(sb&&tg&&vis(sb)>0.5&&sb.textContent.trim()){const i=inter(R(sb),tg);if(i[0]>8&&i[1]>12)o.subs=Math.round(i[1]);}
+    return o;})}'''
+
+def spans(ts):
+    """[0.1 s samples] → 'a–b s, c–d s' (merged runs)"""
+    out = []
+    for t in ts:
+        if out and t - out[-1][1] <= 0.15: out[-1][1] = t
+        else: out.append([t, t])
+    return ', '.join(f'{a:g}–{b:g}s' if b > a else f'{a:g}s' for a, b in out[:4]) + (' …' if len(out) > 4 else '')
+
+def layout_checks(pg, D, add):
+    """Collisions the eye catches at once but the other checks miss (all found by visual_review on a real film):
+    callouts off-frame, headline / subtitles over the camera's hold target, a headline wrapped into a lone last word.
+    (An 'empty canvas' metric — flat-tile share / largest empty band — was tried and dropped: it scored a reviewer-flagged
+    layout and its fix the same. Empty frames stay a visual_review item.)"""
+    ts = [round(k / 10, 1) for k in range(int(D * 10))]
+    r = pg.evaluate(LAYOUT_JS, ts)
+    off = [x['t'] for x in r if x['off']]; cap = [x['t'] for x in r if x['cap']]; sub = [x['t'] for x in r if x['subs']]
+    orph = sorted({x['orphan'] for x in r if x['orphan']})
+    add('callouts in frame', not off, 'every visible callout box is inside the frame' if not off else
+        f'callout box leaves the frame at {spans(off)} (by {max(max(x["off"]) for x in r if x["off"])} px) → shrink the box / sel to what the camera shows')
+    add('headline clear', not cap, 'headline never covers the hold target' if not cap else
+        f'headline pill covers the hold target at {spans(cap)} → raise captionSafe, move the target down, or shorten the hold under the headline')
+    add('subtitles clear', not sub, 'subtitles never cover the hold target' if not sub else
+        f'subtitles cover the hold target at {spans(sub)} → bottomSafe ≥ subtitle height, a smaller target, or subtitles:{{position:"auto"}}', warn=True)
+    add('headline wrap', not orph, 'no headline ends in a lone short line' if not orph else
+        f'{len(orph)} headline(s) wrap into a short last line ("{orph[0][:24]}…") → text-wrap:balance on #cap, or shorter copy', warn=True)
 
 def main():
     a = argparse.ArgumentParser(); a.add_argument('page'); a.add_argument('--lang', default='zh'); a.add_argument('--frames', type=int, default=24); a.add_argument('--aspect', choices=ASPECTS)
@@ -142,6 +187,7 @@ def main():
         still = not drift_cam and not creep
         add('hold still', still, f'{len(holds)} holds still' if still else
             (f'camera drifts in holds {", ".join(drift_cam)} (holdPush?) ' if drift_cam else '') + (f'text creeps sub-pixel in {", ".join(creep)} → slow float/lift or long ease tail on text; use H.reveal/H.settle, keep lifts shadow-only' if creep else ''))
+        layout_checks(pg, D, add)
         # logo: any <img> whose bytes equal a shipped placeholder (templates/logo_t.png) → FAIL, unless this IS a template page
         srcs = pg.evaluate("[...document.querySelectorAll('img')].map(i=>decodeURIComponent(new URL(i.src).pathname))")
         md5 = lambda p: hashlib.md5(open(p, 'rb').read()).hexdigest() if os.path.isfile(p) else None

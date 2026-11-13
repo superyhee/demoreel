@@ -142,7 +142,8 @@ first syllables aren't masked; SFX room-verbed + stereo; master loudnorm -16 LUF
 Audio QA (numbers, since you can't listen): see `references/audio-qa.md` — speech-band SNR p5 ≥ 10 dB, sub share 30–40%, section energy rising into the peak.
 **Commercial gate (MANDATORY, any software, both modes): `python3 $S/commercial_qa.py site/index.html` → fix every FAIL before rendering**
 (hook, length, subtitles, headline restraint, spotlight, framing, ≤3 overlay layers, on-screen text ≥14 px, brightness, ONE CTA,
-cursor off end card, callouts, no placeholder logo, end-card product name present in the VO). Report its score + the MANUAL items (music licence, VO, facts/brand review, phone viewers) to the user.
+cursor off end card, callouts, no placeholder logo, end-card product name present in the VO, callouts inside the frame, headline /
+subtitles never over the hold target, no headline wrapped into a lone last word). Report its score + the MANUAL items (music licence, VO, facts/brand review, phone viewers) to the user.
 Final deliverable (each MP4): `python3 $S/final_check.py out.mp4 --page site/index.html --lang zh` → streams, duration, −16 LUFS,
 true peak ≤ −1 dBTP, black frames, and a contact sheet of the TRANSITION frames → Read it. align_subs/subtitle_marks also
 write `subs_<lang>.srt` next to the json — ship it with the MP4. Verify before reporting: `python3 $S/shot_qa.py site/index.html` (0 framing issues) and `python3 $S/camera_qa.py site/index.html` (0 direction reversals = no jitter) — both run BEFORE rendering, in seconds; `python3 $S/flicker_check.py frames_zh` (0 spikes), extract frames at transitions (`ffmpeg -ss T -i out.mp4 -frames:v 1 x.png`) and Read them;
