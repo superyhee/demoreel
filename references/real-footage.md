@@ -51,6 +51,16 @@ Real footage:
 when the footage didn't scroll to it; end card = 3–4 outcome numbers counted up + ONE CTA. Hide the cursor on intro/end cards.
 Notes: headless recordings have NO mouse pointer → add the engine cursor on hotspots at the click times (convert recording times with the MAP). Light UIs need softer spotlight (`dim≈0.3, fadeIn 1.0, fadeOut 0.8`). Mix both paths freely: real footage for the core flow, rebuilt UI for things you can't record.
 
+## Timing + hotspots: measure with footage_events.py, decide by reading its sheet
+```bash
+python3 $S/footage_events.py scan rec.mp4 ev/              # activity windows + settled frames + OCR (macOS Vision) → ev/events_sheet.png
+#   Read ev/events_sheet.png, then write plan.json in film order: [{"play":[a,b],"speed":2},{"hold":t,"dur":2}, …]
+python3 $S/footage_events.py map plan.json --start 15.0    # → footage map + badges for Demo.init (1 ms cuts drop idle waits)
+python3 $S/footage_events.py find ev/ "FAIL" --at 5.9 --row --below 1   # → callout / hotspot box in footage px (whole row + wrap)
+```
+The tool measures (frame-exact times, pixel-exact OCR boxes); the agent chooses what to play, speed up, freeze and frame.
+Don't ask a model for pixel coordinates (±10–30 px) or timestamps — read the sheet, pick, let the tool measure.
+
 ## Lessons from the DemoReel launch film (terminal-heavy HYBRID)
 - `record_terminal.sh COLS ROWS`: pick COLS so the longest output line fits (140+ for QA-style logs) — wrapped lines break
   mid-word on screen. Then frame close-ups on the LEFT part of the log (hotspot ≈ 60 % of the width, scale ≈ 1.75): the

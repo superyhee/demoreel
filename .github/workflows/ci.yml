@@ -39,6 +39,8 @@ jobs:
           python scripts/commercial_qa.py templates/demo.html --lang en --aspect 9:16
       - name: beat detection regression
         run: python tests/test_beat_grid.py
+      - name: footage cut plan → map
+        run: python tests/test_footage_events.py
       - name: golden camera (template framing, all aspects)
         run: python tests/test_golden_camera.py
       - name: visual review (frame picker + sheets, no API)

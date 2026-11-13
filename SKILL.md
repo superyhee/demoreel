@@ -114,7 +114,8 @@ python3 $S/render_frames.py site/index.html frames_zh --lang zh --from 700 --to 
 
 ## Real footage path (REAL / HYBRID — preferred for dev tools / AI products)
 Read `references/real-footage.md` before recording: demo account only, `record_web.py` / `record_desktop.sh` / `record_mobile.sh` /
-`record_terminal.sh` → `footage_edit.py` → `footage_prep.py` → verify hotspots with `hotspot_overlay.py` → `templates/footage-demo.html`.
+`record_terminal.sh` → `footage_edit.py` → `footage_prep.py` → `footage_events.py` (scan → read the sheet → plan → map; `find` boxes
+by text) → verify hotspots with `hotspot_overlay.py` → `templates/footage-demo.html`.
 Desktop recording: guard EVERY click with `guarded_act.sh`, filter foreign windows with `footage_mask.py`, and if the user's private
 windows appear STOP the recording and tell them. Cursor enhancement, typing, privacy redaction and commercial polish are in the same file.
 
