@@ -93,7 +93,9 @@ Read the sheet; also crop a zoomed frame at full res to check text sharpness. Fi
 **Visual review (taste gate, before rendering):** `python3 $S/visual_review.py site/index.html review/ --lang zh` picks the frames a
 reviewer looks at (hook, each hold, mid-move, callouts, headlines, end card) → Read `review/sheet_*.png`, score `review/rubric.md`
 (10 criteria 0/1/2: hook, focus, legibility, framing, collisions, polish, story, restraint, end card, trust) with frame ids + one fix
-each; apply the top 3 fixes, re-run. Numeric QA can't see collisions, empty establishing shots or half-drawn states — this does.
+each; apply the top 3 fixes, re-run on the SAME frames and compare: `visual_review.py … review2/ --same-frames review/ --compare review/`
+→ every previous issue marked fixed / persistent / unclear (+ new issues, score deltas, compare.md). Act on persistent + new; judge
+progress by that list, not by the total (it drifts ±1–2 between runs). Numeric QA can't see empty shots or half-drawn states — this does.
 `--api` sends the same frames + rubric to Claude (claude-opus-5-5, server-side refusal fallback; `--provider bedrock --region …`) and
 writes review.md/json — costs API credits, ask first; `--dry-run` shows the payload size; `--mp4 out.mp4` reviews the encoded film.
 Calibrated on the starter template: it catches what numeric QA can't (a hard spotlight blur edge cutting a button, a duplicated

@@ -6,8 +6,11 @@ camera hold and the middle of every move, callouts, headline cards, end card), a
 
 usage: visual_review.py site/index.html out_dir [--lang zh] [--aspect 9:16] [--max 16]
                         [--mp4 final.mp4]                 # review the encoded film instead of the live page (same frames)
+                        [--same-frames prev_dir]          # re-use the previous round's frame times (compare like with like)
+                        [--compare prev_dir]              # previous issues → fixed / persistent / new (+ score deltas)
                         [--api [--provider anthropic|bedrock] [--region us-east-1] [--model claude-opus-5-5]] [--dry-run]
-Writes out_dir/frames/*.jpg, out_dir/sheet_*.png (Read these), out_dir/rubric.md; with --api also review.json + review.md.
+Writes out_dir/frames/*.jpg, frames.json, sheet_*.png (Read these), rubric.md; with --api also review.json + review.md
+(+ compare.md with --compare). Iterate: fix → re-run with --same-frames R1 --compare R1 → act on persistent + new issues.
 Exit 1 when (--api) any criterion scores 0.
 """
 import argparse, base64, json, os, subprocess, sys
@@ -28,7 +31,7 @@ RUBRIC = [   # (key, criterion) — scored 0 = fails / 1 = acceptable / 2 = comm
     ('trust', 'Data looks plausible and fictional; no real personal data, emails, paths or tokens visible anywhere.'),
 ]
 SCHEMA = {
-    'type': 'object', 'additionalProperties': False, 'required': ['scores', 'top_fixes', 'overall'],
+    'type': 'object', 'additionalProperties': False, 'required': ['scores', 'issues', 'previous', 'top_fixes', 'overall'],
     'properties': {
         'scores': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False,
                    'required': ['key', 'score', 'frames', 'evidence', 'fix'],
@@ -36,6 +39,13 @@ SCHEMA = {
                                   'score': {'type': 'integer', 'enum': [0, 1, 2]},
                                   'frames': {'type': 'array', 'items': {'type': 'string'}},
                                   'evidence': {'type': 'string'}, 'fix': {'type': 'string'}}}},
+        'issues': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False, 'required': ['title', 'key', 'frames', 'prev'],
+                   'properties': {'title': {'type': 'string'}, 'key': {'type': 'string', 'enum': [k for k, _ in RUBRIC]},
+                                  'frames': {'type': 'array', 'items': {'type': 'string'}},
+                                  'prev': {'type': 'integer'}}}},   # 1-based number of the matching previous issue, 0 = new
+        'previous': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False, 'required': ['n', 'status', 'evidence'],
+                     'properties': {'n': {'type': 'integer'}, 'status': {'type': 'string', 'enum': ['fixed', 'persistent', 'unclear']},
+                                    'evidence': {'type': 'string'}}}},
         'top_fixes': {'type': 'array', 'items': {'type': 'string'}},
         'overall': {'type': 'string'}}}
 
@@ -59,12 +69,29 @@ def pick_times(pg, n_max):
         mid = out[1:-1]; k = n_max - 2; out = [out[0]] + [mid[round(i * (len(mid) - 1) / max(1, k - 1))] for i in range(k)] + [out[-1]]
     return out, D
 
-def grab(o, frames_dir):
+def load_prev(d):
+    """previous round: frame times (frames.json, or parsed from rubric.md of older runs), review.json, its issue list"""
+    if not d: return None
+    P = {'dir': d, 'frames': None, 'review': None, 'issues': []}
+    fj, rm, rj = (os.path.join(d, x) for x in ('frames.json', 'rubric.md', 'review.json'))
+    if os.path.exists(fj): P['frames'] = [(f['t'], f['why']) for f in json.load(open(fj))]
+    elif os.path.exists(rm):
+        import re
+        P['frames'] = [(float(m.group(1)), m.group(2)) for m in re.finditer(r'^- #\d+ ([\d.]+)s — (.*?) — `', open(rm).read(), re.M)]
+    if os.path.exists(rj):
+        R = P['review'] = json.load(open(rj))
+        P['issues'] = [i['title'] for i in R.get('issues', [])] or \
+                      [f"{s['key']}: {s['evidence'][:160]}" for s in R['scores'] if isinstance(s['score'], int) and s['score'] < 2]   # older runs: the problem, not the fix
+    return P
+
+def grab(o, frames_dir, times=None):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         b, pg, _, errs = open_page(p, o.page, o.lang, aspect=o.aspect)
         if errs: sys.exit('page error: ' + errs[0])
-        ts, D = pick_times(pg, o.max); files = []
+        ts, D = pick_times(pg, o.max)
+        if times: ts = [(t, why) for t, why in times if t < D]   # same frames as the previous round
+        files = []
         for i, (t, why) in enumerate(ts):
             f = os.path.join(frames_dir, f'{i:02d}_{t:05.2f}s.jpg')
             if o.mp4:
@@ -97,7 +124,12 @@ def rubric_md(files, D, o):
           'give ONE concrete fix (selector, time, config key). Be strict: a 2 means you would ship it in a launch film.', '',
           '| key | criterion | score | frames | evidence | fix |', '|---|---|---|---|---|---|']
     L += [f'| {k} | {c} |  |  |  |  |' for k, c in RUBRIC]
-    L += ['', 'Then list the top 3 fixes in priority order, apply them, re-run this script and compare.']
+    if o.prev and o.prev['issues']:
+        L += ['', f'Previous round ({o.prev["dir"]}) — mark each issue fixed / persistent / unclear, citing the same frames:', '',
+              '| # | previous issue | status | evidence |', '|---|---|---|---|']
+        L += [f'| {n} | {t} |  |  |' for n, t in enumerate(o.prev['issues'], 1)]
+        L += ['', 'Then list NEW issues separately (not seen last round).']
+    L += ['', 'Then list the top 3 fixes in priority order, apply them, re-run with --same-frames/--compare and compare.']
     return '\n'.join(L) + '\n'
 
 SYSTEM = ('You are a senior motion designer reviewing a software product demo film before release. You see still frames sampled at '
@@ -112,7 +144,12 @@ def api_review(files, D, o):
         content.append({'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/jpeg', 'data': base64.standard_b64encode(open(f, 'rb').read()).decode()}})
     content.append({'type': 'text', 'text': f'Film: {D:g} s, aspect {o.aspect or "16:9"}, language {o.lang}. Score every criterion '
                     '(0 fails / 1 acceptable / 2 commercial quality) with frame ids, evidence and one fix; then the top 3 fixes.\n' +
-                    '\n'.join(f'- {k}: {c}' for k, c in RUBRIC)})
+                    '\n'.join(f'- {k}: {c}' for k, c in RUBRIC) +
+                    '\nAlso list every visible problem in `issues` (short title, criterion key, frame ids).' +
+                    (('\n\nPrevious review of the SAME frames found these issues. In `previous`, mark each one fixed / persistent / '
+                      'unclear by what is visible NOW, with evidence. In `issues`, set prev = the matching previous number, 0 if new.\n' +
+                      '\n'.join(f'{n}. {t}' for n, t in enumerate(o.prev['issues'], 1)))
+                     if o.prev and o.prev['issues'] else '\nThere is no previous review: return previous = [] and prev = 0.')})
     req = dict(model=o.model, max_tokens=16000, system=SYSTEM, messages=[{'role': 'user', 'content': content}])
     # output_config / fallbacks via extra_body: works on older installed SDKs that predate these parameters
     extra = {'output_config': {'effort': 'high', 'format': {'type': 'json_schema', 'schema': SCHEMA}}}
@@ -137,15 +174,34 @@ def api_review(files, D, o):
     text = next(b.text for b in resp.content if b.type == 'text')
     return json.loads(text)
 
+def compare_md(r, P):
+    """score deltas per criterion + previous issues fixed / persistent / unclear + new issues"""
+    old = {s['key']: s['score'] for s in P['review']['scores']}; new = {s['key']: s['score'] for s in r['scores']}
+    tot = lambda d: sum(v for v in d.values() if isinstance(v, int))
+    L = [f'## Compared with {P["dir"]}', '', f'**{tot(old)} → {tot(new)}** / {2 * len(RUBRIC)}', '', '| key | before | now |', '|---|---|---|']
+    L += [f'| {k} | {old.get(k, "?")} | {new.get(k, "?")}{" ▲" if new.get(k, 0) > old.get(k, 0) else " ▼" if new.get(k, 0) < old.get(k, 0) else ""} |' for k, _ in RUBRIC]
+    st = {p['n']: p for p in r.get('previous', [])}
+    for label, want in (('Fixed', 'fixed'), ('Still there', 'persistent'), ('Unclear', 'unclear')):
+        rows = [f'- {P["issues"][n - 1]} — {st[n]["evidence"]}' for n in sorted(st) if st[n]['status'] == want and 0 < n <= len(P['issues'])]
+        if rows: L += ['', f'**{label}** ({len(rows)})'] + rows
+    nu = [i for i in r.get('issues', []) if not i.get('prev')]
+    if nu: L += ['', f'**New** ({len(nu)})'] + [f'- [{i["key"]}] {i["title"]} ({" ".join(i["frames"])})' for i in nu]
+    return '\n'.join(L) + '\n'
+
 def main():
     a = argparse.ArgumentParser(); a.add_argument('page'); a.add_argument('out'); a.add_argument('--lang', default='zh')
     a.add_argument('--aspect', choices=ASPECTS); a.add_argument('--max', type=int, default=16); a.add_argument('--mp4')
     a.add_argument('--api', action='store_true'); a.add_argument('--provider', choices=['anthropic', 'bedrock'], default='anthropic')
     a.add_argument('--region', default=os.environ.get('AWS_REGION', 'us-east-1')); a.add_argument('--model', default='claude-opus-5-5')
-    a.add_argument('--dry-run', action='store_true'); o = a.parse_args()
+    a.add_argument('--dry-run', action='store_true'); a.add_argument('--same-frames'); a.add_argument('--compare'); o = a.parse_args()
+    o.prev = load_prev(o.compare or o.same_frames)
+    sf = load_prev(o.same_frames) if o.same_frames else None
+    if o.same_frames and not (sf and sf['frames']): sys.exit(f'--same-frames: no frames.json / rubric.md in {o.same_frames}')
     fd = os.path.join(o.out, 'frames'); os.makedirs(fd, exist_ok=True)
     for f in os.listdir(fd): os.remove(os.path.join(fd, f))
-    files, D = grab(o, fd); sh = sheets(files, o.out)
+    files, D = grab(o, fd, sf['frames'] if sf else None); sh = sheets(files, o.out)
+    json.dump([{'i': i, 't': t, 'why': w, 'file': os.path.relpath(f, o.out)} for i, (f, t, w) in enumerate(files)],
+              open(os.path.join(o.out, 'frames.json'), 'w'), ensure_ascii=False, indent=1)
     open(os.path.join(o.out, 'rubric.md'), 'w').write(rubric_md(files, D, o))
     print(f'{len(files)} frames → {", ".join(sh)}  ← Read them, score {os.path.join(o.out, "rubric.md")}')
     if not o.api: return
@@ -158,6 +214,8 @@ def main():
         L.append(f"| {k} | {s['score']} | {' '.join(s['frames'])} | {s['evidence']} | {s['fix']} |")
     tot = sum(s['score'] for s in r['scores'] if isinstance(s['score'], int))
     L += ['', f'**{tot}/{2 * len(RUBRIC)}** — {r["overall"]}', '', 'Top fixes:'] + [f'{i + 1}. {x}' for i, x in enumerate(r['top_fixes'])]
+    if o.compare and o.prev and o.prev['review']:
+        C = compare_md(r, o.prev); open(os.path.join(o.out, 'compare.md'), 'w').write(C); L += ['', C]
     open(os.path.join(o.out, 'review.md'), 'w').write('\n'.join(L) + '\n'); print('\n'.join(L))
     sys.exit(1 if any(s['score'] == 0 for s in r['scores']) else 0)
 
