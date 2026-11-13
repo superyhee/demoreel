@@ -2,7 +2,7 @@
 """Parallel segmented render: N Chrome workers each render a contiguous frame range of the DEMO page and pipe
 screenshots straight into their own ffmpeg (no PNGs on disk); segments are then concatenated losslessly.
 
-usage: render_parallel.py <page.html> <out_video.mp4> [--lang zh] [--workers N] [--crf 17] [--preset medium]
+usage: render_parallel.py <page.html> <out_video.mp4> [--lang zh] [--aspect 16:9|9:16|1:1|4:5] [--workers N] [--crf 17] [--preset medium]
                           [--frames-dir DIR]   # optional: also keep PNG frames (for flicker_check / re-encode)
 Writes <out_dir>/sfx_<lang>.json (window.SFX) like render_frames.py. Feed the mp4 to mix.sh as the first arg.
 
@@ -11,24 +11,18 @@ rendered independently. Each segment starts with a keyframe and all segments sha
 Throughput is bound by screenshot capture (~7 fps per worker on M2 Max); workers scale until CPU/GPU saturate.
 """
 import argparse, os, sys, subprocess, tempfile, time, json, base64, shutil
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from page_util import open_page, frame_size, ASPECTS
 
-def worker(page, lang, f0, f1, seg_path, crf, preset, frames_dir):
+def worker(page, lang, aspect, f0, f1, seg_path, crf, preset, frames_dir):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        b = p.chromium.launch(channel='chrome', args=['--window-size=1920,1080', '--disable-gpu-vsync', '--disable-frame-rate-limit'] + os.environ.get('RP_CHROME_ARGS', '').split())
-        pg = b.new_page(viewport={'width': 1920, 'height': 1080}, screen={'width': 1920, 'height': 1080})
-        cdp = pg.context.new_cdp_session(pg)
-        # pin the layout AND screen size before navigation: on a laptop whose screen is shorter than 1080 px, some
-        # Chrome instances otherwise lay out at the screen height (e.g. 993) and the clipped capture repeats rows.
-        cdp.send('Emulation.setDeviceMetricsOverride', {'width': 1920, 'height': 1080, 'deviceScaleFactor': 1, 'mobile': False,
-                                                         'screenWidth': 1920, 'screenHeight': 1080})
-        errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
-        pg.goto('file://' + os.path.abspath(page) + f'?lang={lang}'); pg.wait_for_timeout(800)
+        b, pg, cdp, errs = open_page(p, page, lang, aspect=aspect, args=['--window-size=1920,1080', '--disable-gpu-vsync', '--disable-frame-rate-limit'] + os.environ.get('RP_CHROME_ARGS', '').split())
         if errs: sys.exit('page error: ' + errs[0])
         fps = pg.evaluate('window.FPS||30')
-        ih = pg.evaluate('innerHeight')
-        if ih != 1080: sys.exit(f'viewport is {ih}px high, expected 1080 — refusing to render corrupted frames')
-        CLIP = {'x': 0, 'y': 0, 'width': 1920, 'height': 1080, 'scale': 1}
+        W, H = frame_size(pg); iw, ih = pg.evaluate('[innerWidth,innerHeight]')
+        if (iw, ih) != (W, H): sys.exit(f'viewport is {iw}×{ih}px, expected {W}×{H} — refusing to render corrupted frames')
+        CLIP = {'x': 0, 'y': 0, 'width': W, 'height': H, 'scale': 1}
         ff = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'image2pipe', '-framerate', str(fps), '-i', '-',
                                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', str(crf), '-preset', preset,
                                '-x264-params', 'keyint=60:min-keyint=1', '-threads', os.environ.get('RP_X264_THREADS', '2'), '-r', str(fps), seg_path], stdin=subprocess.PIPE)
@@ -51,21 +45,17 @@ def worker(page, lang, f0, f1, seg_path, crf, preset, frames_dir):
 
 def main():
     a = argparse.ArgumentParser()
-    a.add_argument('page'); a.add_argument('out'); a.add_argument('--lang', default='zh')
+    a.add_argument('page'); a.add_argument('out'); a.add_argument('--lang', default='zh'); a.add_argument('--aspect', choices=ASPECTS)
     a.add_argument('--workers', type=int, default=max(2, min(6, (os.cpu_count() or 4) // 2)))   # 6 ≈ sweet spot on M2 Max (34 fps)
     a.add_argument('--crf', type=int, default=17); a.add_argument('--preset', default='medium')
     a.add_argument('--frames-dir'); a.add_argument('--limit', type=int, help='render only the first N frames (benchmark)'); a.add_argument('--_w', nargs=4)   # internal: f0 f1 seg_path frames_dir|-
     o = a.parse_args()
     if o._w:
-        f0, f1, seg, fd = o._w; worker(o.page, o.lang, int(f0), int(f1), seg, o.crf, o.preset, None if fd == '-' else fd); return
+        f0, f1, seg, fd = o._w; worker(o.page, o.lang, o.aspect, int(f0), int(f1), seg, o.crf, o.preset, None if fd == '-' else fd); return
     # read duration/fps/SFX once
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        b = p.chromium.launch(channel='chrome'); pg = b.new_page(viewport={'width': 1920, 'height': 1080}, screen={'width': 1920, 'height': 1080})
-        pg.context.new_cdp_session(pg).send('Emulation.setDeviceMetricsOverride', {'width': 1920, 'height': 1080, 'deviceScaleFactor': 1,
-                                            'mobile': False, 'screenWidth': 1920, 'screenHeight': 1080})   # same layout as workers
-        errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
-        pg.goto('file://' + os.path.abspath(o.page) + f'?lang={o.lang}'); pg.wait_for_timeout(800)
+        b, pg, _, errs = open_page(p, o.page, o.lang, aspect=o.aspect)   # same layout as workers
         fps = pg.evaluate('window.FPS||30'); dur = pg.evaluate('window.DURATION||30')
         if errs: sys.exit('page error: ' + errs[0])
         with open(os.path.join(os.path.dirname(os.path.abspath(o.out)), f'sfx_{o.lang}.json'), 'w') as fh:
@@ -80,7 +70,7 @@ def main():
     try:
         for i in range(W):
             seg = os.path.join(tmp, f'seg{i:02d}.mp4')
-            procs.append((seg, subprocess.Popen([sys.executable, os.path.abspath(__file__), o.page, o.out, '--lang', o.lang,
+            procs.append((seg, subprocess.Popen([sys.executable, os.path.abspath(__file__), o.page, o.out, '--lang', o.lang, *(['--aspect', o.aspect] if o.aspect else []),
                          '--crf', str(o.crf), '--preset', o.preset, '--_w', str(bounds[i]), str(bounds[i + 1]), seg, o.frames_dir or '-'])))
         # poll all workers instead of joining them in launch order: the first failure aborts the whole render at once
         live = list(procs)

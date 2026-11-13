@@ -10,13 +10,17 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - name: python syntax
-        run: python -m py_compile scripts/*.py examples/*.py
+        run: python -m py_compile scripts/*.py examples/*.py tests/*.py
       - name: shell syntax + shellcheck (errors only)
         run: |
           for f in scripts/*.sh; do bash -n "$f"; done
           shellcheck -S error scripts/*.sh
       - name: engine.js syntax
         run: node --check templates/engine.js
+      - name: engine.js is built from templates/engine/*.js
+        run: python scripts/build_engine.py --check
+      - name: engine core unit tests (camera framing, zoom path, beat snapping)
+        run: node --test tests/engine_core.test.js
 
   smoke:
     runs-on: ubuntu-latest   # Google Chrome is preinstalled on GitHub's Ubuntu runners (playwright channel='chrome')
@@ -29,11 +33,23 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           pip install -r requirements.txt
-      - name: commercial_qa on the starter template
-        run: python scripts/commercial_qa.py templates/demo.html --lang en
+      - name: commercial_qa on the starter template (16:9 + 9:16)
+        run: |
+          python scripts/commercial_qa.py templates/demo.html --lang en
+          python scripts/commercial_qa.py templates/demo.html --lang en --aspect 9:16
+      - name: beat detection regression
+        run: python tests/test_beat_grid.py
+      - name: footage cut plan → map
+        run: python tests/test_footage_events.py
+      - name: golden camera (template framing, all aspects)
+        run: python tests/test_golden_camera.py
+      - name: visual review (frame picker + sheets, no API)
+        run: python scripts/visual_review.py templates/demo.html out/review --lang en && test -s out/review/sheet_1.png
       - name: render 30 frames + mix
         run: |
           mkdir -p out
           python scripts/render_parallel.py templates/demo.html out/smoke.mp4 --lang en --limit 30 --workers 2
           scripts/mix.sh out/smoke.mp4 - - - out/final.mp4 30 1
           test -s out/final.mp4
+          python scripts/render_parallel.py templates/demo.html out/smoke_v.mp4 --lang en --aspect 9:16 --limit 30 --workers 2
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 out/smoke_v.mp4 | grep -qx '1080,1920'

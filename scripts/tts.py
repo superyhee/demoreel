@@ -40,15 +40,23 @@ def _paced():
 def _limited(wait):   # called on a rate-limit hit: from now on keep ≥ 3.5 s between requests so later lines don't hit it again
     _PACE['gap'] = max(_PACE['gap'], 3.5); print(f'  rate limited → retry in {wait} s, then pacing requests {_PACE["gap"]:.1f} s apart', file=sys.stderr); time.sleep(wait)
 
+def retry(fn, limited):   # call fn(); while limited(result), back off (BACKOFF) and call again; the last result is returned as-is
+    for wait in BACKOFF:
+        r = fn()
+        if not limited(r): return r
+        _limited(wait)
+    return fn()
+
 def http(url, body, headers, timeout=60):
-    for i in range(len(BACKOFF) + 1):
+    def post():
         req = urllib.request.Request(url, data=body, headers=headers, method='POST'); _paced()
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r: return r.read()
-        except urllib.error.HTTPError as e:
-            if e.code == 429 and i < len(BACKOFF):
-                _limited(BACKOFF[i]); continue
-            sys.exit(f'ERROR: {url.split("/")[2]} returned HTTP {e.code}: {e.read()[:300].decode("utf-8", "ignore")}')
+        except urllib.error.HTTPError as e: return e
+    r = retry(post, lambda r: isinstance(r, urllib.error.HTTPError) and r.code == 429)
+    if isinstance(r, urllib.error.HTTPError):
+        sys.exit(f'ERROR: {url.split("/")[2]} returned HTTP {r.code}: {r.read()[:300].decode("utf-8", "ignore")}')
+    return r
 
 def synth(p, text, o, path):
     zh = o.lang.lower().startswith(('zh', 'cmn'))
@@ -80,11 +88,9 @@ def synth(p, text, o, path):
         body = {'model': o.model or 'speech-02-hd', 'text': text, 'stream': False, 'language_boost': 'Chinese' if zh else 'English',
                 'voice_setting': {'voice_id': voice, 'speed': o.speed, 'vol': 1.0, 'pitch': 0},
                 'audio_setting': {'sample_rate': 32000, 'bitrate': 128000, 'format': 'mp3', 'channel': 1}}
-        for i in range(len(BACKOFF) + 1):
-            r = json.loads(http(f'https://{host}/v1/t2a_v2', json.dumps(body).encode(), {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}))
-            br = r.get('base_resp', {})
-            if br.get('status_code') != 1002 or i == len(BACKOFF): break   # 1002 = RPM rate limit → back off and retry
-            _limited(BACKOFF[i])
+        r = retry(lambda: json.loads(http(f'https://{host}/v1/t2a_v2', json.dumps(body).encode(), {'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'})),
+                  lambda r: r.get('base_resp', {}).get('status_code') == 1002)   # 1002 = RPM rate limit → back off and retry
+        br = r.get('base_resp', {})
         if br.get('status_code') != 0 or not (r.get('data') or {}).get('audio'):
             sys.exit(f"ERROR: minimax {br.get('status_code')}: {br.get('status_msg')} (key region? set MINIMAX_API_HOST=api.minimax.io for international keys)")
         open(path, 'wb').write(bytes.fromhex(r['data']['audio']))

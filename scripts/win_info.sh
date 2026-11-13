@@ -4,10 +4,8 @@
 # and to convert window-screenshot pixels into screen click coordinates. usage: win_info.sh "<App process name>"
 set -euo pipefail
 [ $# -eq 1 ] || { echo "usage: $0 \"<App>\"" >&2; exit 2; }
-BIN="$HOME/.cache/demoreel/qwin2"
-if [ ! -x "$BIN" ]; then
-  mkdir -p "$(dirname "$BIN")"; SRC=$(mktemp -d)/qwin.swift
-  cat > "$SRC" <<'SWIFT'
+. "$(dirname "$0")/mac_lib.sh"
+BIN=$(swift_bin qwin2 <<'SWIFT'
 import Foundation
 import CoreGraphics
 let pid = Int(CommandLine.arguments[1])!
@@ -24,8 +22,7 @@ for w in list {
 guard let r = best else { FileHandle.standardError.write("no on-screen window for pid \(pid)\n".data(using: .utf8)!); exit(1) }
 print(r.0, Int(r.1), Int(r.2), Int(r.3), Int(r.4))
 SWIFT
-  swiftc -O "$SRC" -o "$BIN"
-fi
+)
 # match by PID: the window-server owner name can differ from the process name (e.g. bundle display name "Acme Pro" vs process name "Acme")
-PID=$(osascript -e "tell application \"System Events\" to get unix id of process \"$1\"" 2>/dev/null) || { echo "no running process \"$1\"" >&2; exit 1; }
+PID=$(osascript -e 'on run argv' -e 'tell application "System Events" to get unix id of process (item 1 of argv)' -e 'end run' "$1" 2>/dev/null) || { echo "no running process \"$1\"" >&2; exit 1; }
 "$BIN" "$PID"

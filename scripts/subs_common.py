@@ -15,7 +15,8 @@ def phrases(toks, maxw=16, line_end=None):
         if cur: items.append({'t0': cur[0]['t'], 't1': round(end, 3), 'words': cur}); cur, n = [], 0
     for i, tk in enumerate(toks):
         vis = width(tk['text'])
-        if cur and n + vis > maxw: flush(tk['t'] - 0.05)
+        punct_only = bool(tk['text'].strip()) and all(c in PUNCT for c in tk['text'].strip())
+        if cur and n + vis > maxw and not punct_only: flush(tk['t'] - 0.05)   # never strand a lone '。' as its own phrase
         cur.append(tk); n += vis
         e = tk['text'].strip()[-1:] if tk['text'].strip() else ''
         if e and e in PUNCT and n >= (6 if e in '。！？.!?' else max(6, maxw * 0.45)) and i + 1 < len(toks): flush(toks[i + 1]['t'] - 0.05)

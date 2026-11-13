@@ -20,13 +20,51 @@ em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--accent
 #topfade{left:0;right:0;top:0;height:200px;z-index:19;background:linear-gradient(var(--bg) 0%,rgba(246,245,250,.85) 45%,rgba(246,245,250,0) 100%)}
 #cursor{width:34px;height:34px;z-index:30;left:0;top:0;transform-origin:4px 2px}
 #ripple{width:70px;height:70px;border-radius:50%;border:3px solid var(--accent);background:rgba(123,47,247,.12);z-index:29;opacity:0;left:0;top:0}
-/* hook + logo + end */
+/* hook + logo + end — pick the opening from references/hooks.md; ?hook=text|result|split|timer previews the built-in ones */
 #hook{left:0;right:0;top:430px;text-align:center;font-size:84px;font-weight:700;z-index:5}
+.hk{opacity:0;z-index:5}
+#hkResult{left:460px;top:220px;width:1000px}
+.rcard{background:#fff;border:1.5px solid #c9b8ff;border-radius:18px;padding:34px 42px;font-size:40px;line-height:1.55;box-shadow:0 30px 80px rgba(40,20,90,.18)}
+.rlab{font-size:26px;color:var(--accent);font-weight:700;margin-bottom:10px;display:flex;gap:8px;align-items:center}
+#hkQ{margin-top:36px;text-align:center;font-size:66px;font-weight:700}
+#hkSplit{left:120px;right:120px;top:170px;height:680px;display:flex;gap:40px}
+.pane{flex:1;background:#fff;border-radius:20px;box-shadow:0 30px 80px rgba(40,20,90,.14);padding:30px;position:relative;overflow:hidden}
+.ph{font-size:34px;font-weight:700;color:#999;margin-bottom:18px}.pane.b .ph{color:var(--accent)}
+.tbx{height:64px;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;font-size:27px;display:flex;align-items:center;padding:0 14px;color:#555;white-space:nowrap}
+.pclock{position:absolute;right:30px;top:28px;font-size:38px;font-weight:700;color:#d13212;font-variant-numeric:tabular-nums}
+.pane.b .ans{font-size:38px;line-height:1.55}
+#hkTimer{left:0;right:0;top:300px;text-align:center}
+.tbig{font-size:150px;font-weight:800;font-variant-numeric:tabular-nums;display:inline-block;padding:0 24px}
+#tA{color:#9a98a8}#tB{color:var(--accent)}
+.tlab{font-size:46px;font-weight:600;margin-top:14px}
 #logoWrap,#end{left:0;right:0;top:300px;text-align:center;z-index:4;opacity:0}
 #logoWrap img,#end img{width:200px;height:200px}
 .cta{display:inline-block;margin-top:34px;background:#4f46e5;color:#fff;font-size:30px;font-weight:600;padding:16px 44px;border-radius:999px;box-shadow:0 18px 44px rgba(79,70,229,.4)}
 .big{font-size:76px;font-weight:700;margin-top:8px}
 .sub{font-size:44px;font-weight:600;margin-top:10px}
+/* ===== other aspects (?aspect=9:16|1:1|4:5 → engine adds body.ar-9x16 / ar-1x1 / ar-4x5 and sets the frame size).
+   Only the overlays are re-laid out; the app window (#cam world) stays as authored and the camera reframes it. ===== */
+body:not(.ar-16x9) #cap{white-space:normal;text-wrap:balance;max-width:calc(var(--W) - 100px);text-align:center;font-size:50px;padding:16px 40px;border-radius:36px}
+body:not(.ar-16x9) #hook{top:calc(var(--H) * .38);padding:0 60px;font-size:92px;line-height:1.2}
+body:not(.ar-16x9) #hkResult{left:50px;right:50px;width:auto;top:calc(var(--H) * .22)}
+body:not(.ar-16x9) #hkSplit{left:50px;right:50px;top:calc(var(--H) * .12);height:calc(var(--H) * .72);flex-direction:column;gap:30px}
+body:not(.ar-16x9) #hkTimer{top:calc(var(--H) * .32)}
+body:not(.ar-16x9) .tbig{display:block;font-size:170px}
+body:not(.ar-16x9) #logoWrap,body:not(.ar-16x9) #end{top:calc(var(--H) * .5 - 300px);padding:0 50px}
+body.ar-9x16 #cap{top:150px}                         /* below the platforms' top bar */
+body.ar-9x16 #topfade{height:340px}
+/* narrow frames: the app window itself goes portrait (no sidebar, larger type) so wide shots fill the frame and close-ups
+   never show the window's bottom edge floating mid-frame */
+body:not(.ar-16x9) #win{left:40px;top:110px;width:1000px;height:calc(var(--H) - 160px)}
+body.ar-1x1 #win,body.ar-4x5 #win{height:calc(var(--H) * 1.15)}   /* square-ish frames: close-ups never reach the window's bottom edge */
+body:not(.ar-16x9) #side{display:none}
+body:not(.ar-16x9) #main{left:0;padding:36px 40px}
+body:not(.ar-16x9) h1{font-size:54px}
+body:not(.ar-16x9) .item{height:88px;font-size:27px}
+body:not(.ar-16x9) .item svg{font-size:28px}
+body:not(.ar-16x9) .tag{font-size:20px}
+body:not(.ar-16x9) #btn{font-size:26px;padding:16px 26px}
+body:not(.ar-16x9) #result{font-size:27px;min-height:150px}
 /* ===== app window (rebuild the real UI from screenshots, with FICTIONAL data) ===== */
 #win{position:absolute;left:180px;top:190px;width:1560px;height:850px;background:#fff;border-radius:18px;box-shadow:0 50px 120px rgba(40,20,90,.25),0 0 0 1px rgba(0,0,0,.06);overflow:hidden}
 #tb{height:44px;background:#f4f3f7;display:flex;align-items:center;padding-left:18px;gap:9px;border-bottom:1px solid var(--line)}
@@ -40,12 +78,16 @@ h1{font-size:40px;font-weight:300;margin-bottom:24px}
 .item svg{color:var(--accent);font-size:20px}
 .tag{margin-left:auto;font-size:14px;padding:2px 10px;border-radius:999px;border:1.5px solid #d13212;color:#d13212;background:#fff2ef}
 #btn{display:inline-flex;gap:8px;align-items:center;margin-top:12px;background:var(--selInk);color:#fff;font-size:18px;font-weight:600;padding:12px 20px;border-radius:10px}
-#result{margin-top:18px;border:1.5px solid #c9b8ff;border-radius:12px;padding:16px 20px;background:#faf7ff;font-size:18px;line-height:1.7;overflow:hidden;min-height:96px}   /* fixed layout: camera targets keep their size */
+#result{margin-top:18px;border:1.5px solid #c9b8ff;border-radius:12px;padding:16px 20px;background:#faf7ff;font-size:22px;line-height:1.7;overflow:hidden;min-height:96px}   /* fixed layout: camera targets keep their size */
 </style></head><body>
 <div id="stage">
   <div class="orb" id="o1" style="width:900px;height:700px;background:#e9defe"></div>
   <div class="orb" id="o2" style="width:800px;height:700px;background:#ffe3f3"></div>
   <div id="hook" class="abs"></div>
+  <div id="hkResult" class="abs hk"><div class="rcard"><div class="rlab" id="hkRL"></div><span id="hkRT"></span></div><div id="hkQ"></div></div>
+  <div id="hkSplit" class="abs hk"><div class="pane a"><div class="ph" id="hkA"></div><div class="pclock" id="hkClk"></div><div id="hkTabs"></div></div>
+    <div class="pane b"><div class="ph" id="hkB"></div><div class="ans" id="hkAns"></div></div></div>
+  <div id="hkTimer" class="abs hk"><div><span class="tbig" id="tA"></span><span class="tbig" id="tB"></span></div><div class="tlab" id="tL"></div></div>
   <div id="logoWrap" class="abs"><img src="logo_t.png"><div class="big" id="pname"></div><div class="sub"><em id="ptag"></em></div></div>
   <div id="cam"><div id="win">
     <div id="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
@@ -58,53 +100,77 @@ h1{font-size:40px;font-weight:300;margin-bottom:24px}
 const LANG=new URLSearchParams(location.search).get('lang')||'zh';document.body.className=LANG;
 /* ===== STRINGS per language (keep every visible string here) ===== */
 const L={
- zh:{hook:'每天上百条消息，<em>先做哪件？</em>',name:'Acme App',tag:'智能收件箱',nav:['收件箱','日历','设置'],h1:'今天',
+ zh:{hook:'每天|上百条|消息，|<br>|<em>先做|哪件？</em>',
+     hk:{q:'这是<em>怎么来的？</em>',a:'手动整理',b:'Acme',tabs:['邮件 · 客户合同','日历 · Q4 评审','表格 · 差旅报销','聊天 · 32 条未读','文档 · 路线图'],
+         from:'2 小时',to:'2 分钟',lab:'每天理清重点的时间'},   // ← numbers must come from the user / the story, never invented
+     name:'Acme App',tag:'智能收件箱',nav:['收件箱','日历','设置'],h1:'今天',
      items:['回复客户合同问题','评审 Q4 路线图','提交差旅报销'],btn:'AI 总结',result:'三件事里，合同问题最急：客户今天 18:00 前需要答复。',
-     caps:['自动整理<em>今天的重点</em>','<em>一键</em>生成总结'],slogan:'<em>先做重要的事</em>',cta:'免费试用 · acme.app'},
- en:{hook:'Hundreds of messages.<br><em>Where do you start?</em>',name:'Acme App',tag:'Smart inbox',nav:['Inbox','Calendar','Settings'],h1:'Today',
+     caps:['自动整理<em>今天的重点</em>','<em>一键</em>生成总结'],note:'最急：18:00 前答复',slogan:'<em>先做重要的事</em>',cta:'免费试用 · acme.app'},
+ en:{hook:'Hundreds of messages. <br> <em>Where do you start?</em>',
+     hk:{q:'How did <em>this happen?</em>',a:'By hand',b:'Acme',tabs:['Mail · contract question','Calendar · Q4 review','Sheet · travel expenses','Chat · 32 unread','Doc · roadmap'],
+         from:'2 hours',to:'2 min',lab:'to find today\'s priorities'},
+     name:'Acme App',tag:'Smart inbox',nav:['Inbox','Calendar','Settings'],h1:'Today',
      items:['Reply to customer contract question','Review Q4 roadmap','Submit travel expenses'],btn:'AI summary',result:'Of the three, the contract question is most urgent: the customer needs an answer by 6 PM.',
-     caps:['Today\'s <em>priorities</em>, organized','Summaries in <em>one click</em>'],slogan:'<em>Do what matters first</em>',cta:'Try it free · acme.app'}
+     caps:['Today\'s <em>priorities</em>, organized','Summaries in <em>one click</em>'],note:'Most urgent: reply by 6 PM',slogan:'<em>Do what matters first</em>',cta:'Try it free · acme.app'}
 }[LANG];
 </script>
 <script src="subs.js" onerror="window.SUBS=null"></script><!-- scripts/subtitle_marks.py vo.tsv subs.json --keywords "…" -->
+<script src="beats.js" onerror="window.BEATS=null"></script><!-- scripts/beat_grid.py beats.js --bpm 120 | --wav music.wav : cut on the beat -->
 <script src="engine.js"></script>
 <script>
 const H=Demo.H,I=H.I,$=H.$;
-$('#hook').innerHTML=L.hook;$('#pname').textContent=L.name;$('#ptag').textContent=L.tag;$('#ename').textContent=L.name;$('#eslogan').innerHTML=L.slogan;$('#ecta').textContent=L.cta;
+const HOOK=new URLSearchParams(location.search).get('hook')||'text';   // the opening; choose per film from references/hooks.md
+const HK={text:'#hook',result:'#hkResult',split:'#hkSplit',timer:'#hkTimer'}, hkEl=$(HK[HOOK]||HK.text);
+Object.values(HK).forEach(q=>{if($(q)!==hkEl)$(q).style.display='none';});   // only the chosen variant is ever shown
+$('#hkRL').innerHTML=I('spark')+L.btn;$('#hkA').textContent=L.hk.a;$('#hkB').textContent=L.hk.b;$('#tL').textContent=L.hk.lab;$('#tA').textContent=L.hk.from;$('#tB').textContent=L.hk.to;
+$('#hkTabs').innerHTML=L.hk.tabs.map((x,i)=>`<div class="tbx" id="tbx${i}">${x}</div>`).join('');$('#pname').textContent=L.name;$('#ptag').textContent=L.tag;$('#ename').textContent=L.name;$('#eslogan').innerHTML=L.slogan;$('#ecta').textContent=L.cta;
 $('#side').innerHTML=L.nav.map((n,i)=>`<div class="nav${i?'':' on'}">${I(['mail','cal','settings'][i])}${n}</div>`).join('');
 $('#h1').textContent=L.h1;
 $('#list').innerHTML=L.items.map((n,i)=>`<div class="item" id="it${i}">${I(['reply','grid','plane'][i]||'file')}${n}${i?'':'<span class="tag">!</span>'}</div>`).join('');
 $('#btn').innerHTML=I('spark')+L.btn;
 /* ===== TIMELINE (seconds). Plan: 1 visual change every 2-3 s ===== */
 Demo.init({
- duration:15, accent:'#8b5cf6',
+ duration:16.5, accent:'#8b5cf6', fitMinZoom:1.05, aspects:{'9:16':{camRho:0.8},'1:1':{camRho:0.8},'4:5':{camRho:0.8}},   // narrow frames: the portrait window is already phone-sized; flatter zoom path between similar scales
  /* COMMERCIAL LAYER (defaults are already commercial: spotlight dim 0.35, headline ≤3.2 s, camBounds '#win', subtitles from subs.js,
     declutter ≤3 layers). Add: callouts on the key result, a clock for long AI/agent work, ONE CTA on the end card.
     Then: python3 scripts/commercial_qa.py site/index.html  → fix every FAIL before rendering. */
  spotlight:{color:'250,248,255',dim:0.4},   // light UI → light veil (dark UIs: omit color → dark dim 0.35)
- notes:[{t0:9.2,t1:11.6,sel:'#result',label:'AI summary in 1 click',side:'bottom'}],
+ notes:[{t0:10.7,t1:13.1,sel:'#result',label:L.note,side:'bottom'}],
  // clock:{segs:[[t0,t1,0,speed]],zero:0,stopAt:null,label:'Agent working',done:'Done',show:[t0,t1+0.6]},
- camIn:[3.9,4.7], camOut:[12.2,12.9],
- cam:[[3.9,['#win'],1],[4.8,['#it0','#it2'],1.5,0,-2],[7.4,['#it0','#it2'],1.55,0,-2],[8.0,['#btn','#result'],1.25,1,2],[11.8,['#btn','#result'],1.3,1,2],[12.6,['#win'],0.92,6,0]],
- cursor:[[7.6,[1500,1200]],[8.6,'#btn'],[11.6,'#btn'],[12.2,[1700,1250]]],
- clicks:[8.75],
- captions:[[4.9,7.6,L.caps[0]],[7.7,12.0,L.caps[1]]],
- sfx:[[0.3,'swish',0.6],[2.6,'suck',1],[3.0,'boom',1],[5.2,'pop',0.5],[5.5,'pop',0.5],[5.8,'pop',0.5],[13.0,'shimmer',1],
-      ...Array.from({length:20},(_,i)=>[9.0+i*0.08,'tick',0.45])],
+ camIn:[3.9,4.7], camOut:[13.7,14.4],
+ cam:[[3.9,['#win'],1],[6.3,['#win'],1],   // establishing wide: the list fills in while the whole app is visible
+      [7.3,['#it0','#it2'],1.5,0,-2],[8.9,['#it0','#it2'],1.55,0,-2],[9.5,['#btn','#result'],1.6,1,2],[13.3,['#btn','#result'],1.6,1,2],[14.1,['#win'],0.92,6,0]],
+ cursor:[[9.1,[1500,1200]],[10.1,'#btn svg'],[13.1,'#btn svg'],[13.7,[1700,1250]]],
+ clicks:[10.25],
+ captions:[[7.0,9.1,L.caps[0]],[9.2,13.5,L.caps[1]]],
+ sfx:[[0.3,'swish',0.6],[1.0,'swish',0.35],[1.4,'pop',0.5],[2.6,'suck',1],[3.0,'boom',1],[5.0,'pop',0.5],[5.3,'pop',0.5],[5.6,'pop',0.5],[14.5,'shimmer',1],
+      ...Array.from({length:20},(_,i)=>[10.5+i*0.08,'tick',0.45])],
  scene(t,H){
   $('#o1').style.transform=`translate(${-200+Math.sin(t*.25)*120}px,${-250+Math.cos(t*.2)*80}px)`;
   $('#o2').style.transform=`translate(${1300+Math.cos(t*.22)*120}px,${600+Math.sin(t*.3)*90}px)`;
-  const hk=H.eo(H.p(t,0.2,0.8)),hx=H.p(t,2.4,2.8);$('#hook').style.opacity=hk*(1-hx);$('#hook').style.filter=`blur(${(1-hk)*8+hx*10}px)`;$('#hook').style.transform=`scale(${H.lerp(.94,1,hk)})`;
+  // ---- HOOK 0–2.8 s (one of: text | result | split | timer), then every variant exits the same way into the logo
+  const hx=H.p(t,2.4,2.8);hkEl.style.opacity=(t<2.8?1:0)*(1-hx);hkEl.style.filter=hx>0?`blur(${hx*10}px)`:'none';
+  if(t<2.8){   // invisible afterwards → skip the per-frame work
+  if(hkEl.id==='hkResult'){            // RESULT FIRST: the finished output, then the question
+    H.reveal($('#hkResult .rcard'),t,0.1,{d:0.45,dy:30,s:0.04});H.stream($('#hkRT'),t,0.25,1.3,L.result,{post:0.2});H.kinetic($('#hkQ'),t,1.45,L.hk.q,{stagger:0.1});}
+  else if(hkEl.id==='hkSplit'){        // BEFORE / AFTER: tedious left, instant right
+    L.hk.tabs.forEach((_,i)=>H.reveal($('#tbx'+i),t,0.15+i*0.22,{d:0.3,dx:-40,dy:0}));
+    H.count($('#hkClk'),t,0.1,2.3,0,47,n=>`${String(Math.floor(n)).padStart(2,'0')}:${String(Math.floor(n*37)%60).padStart(2,'0')}`);
+    H.stream($('#hkAns'),t,1.0,1.9,L.result,{post:0.3});}
+  else if(hkEl.id==='hkTimer'){        // TIME CONTRAST: old time struck out → new time
+    H.reveal($('#tA'),t,0.1,{d:0.35,dy:30});H.strike($('#tA'),t,0.95,0.3,'#d13212',10);
+    H.reveal($('#tB'),t,1.35,{d:0.4,dy:30,s:0.1});H.reveal($('#tL'),t,1.7,{d:0.35,dy:16});}
+  else H.kinetic(hkEl,t,0.2,L.hook,{stagger:0.14});}   // TEXT: kinetic question
   const lo=H.p(t,2.9,3.1)*(1-H.eio(H.p(t,3.5,3.9)));$('#logoWrap').style.opacity=lo;$('#logoWrap').style.transform=`scale(${1+H.eio(H.p(t,3.5,3.9))*1.6})`;$('#logoWrap').style.filter=`blur(${H.p(t,3.5,3.9)*14}px)`;
   $('#logoWrap img').style.transform=`scale(${H.pop(t,2.95,0.5)})`;
-  [0,1,2].forEach(i=>{const k=H.eo(H.p(t,5.1+i*0.3,5.6+i*0.3));const e=$('#it'+i);e.style.opacity=k;e.style.transform=`translateX(${(1-k)*120}px)`;});
-  $('#btn').style.background=t>8.75?'#2a12a8':'';$('#btn').style.transform=t>8.75&&t<8.87?'scale(.94)':'';
-  H.stream($('#rt'),t,9.0,10.6,L.result,{post:0.4});
-  H.reveal($('#result'),t,8.85,{d:0.35,dy:10});   // layout stays → the hold on #result is still (no re-framing, no text shimmer)
+  [0,1,2].forEach(i=>{const k=H.eo(H.p(t,4.9+i*0.3,5.4+i*0.3));const e=$('#it'+i);e.style.opacity=k;e.style.transform=`translateX(${(1-k)*120}px)`;});
+  $('#btn').style.background=t>10.25?'#2a12a8':'';$('#btn').style.transform=t>10.25&&t<10.37?'scale(.94)':'';
+  H.stream($('#rt'),t,10.5,12.1,L.result,{post:0.4});
+  H.reveal($('#result'),t,10.35,{d:0.35,dy:10});   // layout stays → the hold on #result is still (no re-framing, no text shimmer)
  },
  post(t,H){
-  const en=H.eo(H.p(t,12.8,13.4));$('#end').style.opacity=en;$('#end').style.filter=`blur(${(1-en)*10}px)`;
-  $('#end img').style.transform=`scale(${t<12.8?0.4:H.back(H.p(t,12.8,13.3))})`;
+  const en=H.eo(H.p(t,14.3,14.9));$('#end').style.opacity=en;$('#end').style.filter=`blur(${(1-en)*10}px)`;
+  $('#end img').style.transform=`scale(${t<14.3?0.4:H.back(H.p(t,14.3,14.8))})`;
  }
 });
 </script></body></html>
